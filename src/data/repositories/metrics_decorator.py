@@ -40,8 +40,7 @@ def track_metrics(model_class: Type[T], slow_query_threshold_ms: float = 1000.0)
                 
                 repository._metrics.record_operation(
                     duration_ms=duration_ms,
-                    error=error_occurred,
-                    slow=is_slow
+                    error=error_occurred
                 )
                 
                 if is_slow:
