@@ -1,73 +1,200 @@
-# Solver Sandbox
+# AXAI PostgreSQL Models
 
-A comprehensive database and application sandbox environment for exploring Solver's capabilities.
+This package provides PostgreSQL models and database management for AXAI applications. It includes a comprehensive set of models for managing organizations, users, documents, topics, and their relationships.
 
-## Overview
+## Installation
 
-This project provides a sandbox environment for database operations, application development, and testing. It includes a PostgreSQL database setup with sample data, security configurations, and performance analysis tools.
-
-## Features
-
-- PostgreSQL database with sample schemas and data
-- Security configurations and GDPR compliance
-- Performance testing and analysis tools
-- Backup and recovery procedures
-- Python application framework
-
-## Setup Instructions
-
-### Prerequisites
-
-- Python 3.8+
-- PostgreSQL 12+
-- Git
-
-### Installation
-
-1. Clone the repository:
-   ```bash
-   git clone [repository-url]
-   cd axai-pg
-   ```
-
-2. Set up the database:
-   ```bash
-   psql -U postgres -f schema.sql
-   psql -U postgres -f sample_data.sql
-   ```
-
-3. Install Python dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-## Project Structure
-
-```
-.
-├── src/               # Python source code
-├── sql/              # Database scripts
-├── migrations/       # Database migrations
-├── docs/            # Documentation
-├── tests/           # Test suite
-└── backup_scripts/  # Backup and recovery scripts
+```bash
+pip install axai-pg
 ```
 
 ## Usage
 
-1. Database Operations:
-   ```bash
-   # Run schema verification
-   psql -U postgres -f schema_verification.md
-   
-   # Run performance tests
-   psql -U postgres -f perf_test_scenarios.md
-   ```
+### Basic Setup
 
-2. Python Application:
-   ```bash
-   python src/main.py
-   ```
+```python
+from axai_pg import DatabaseManager, PostgresConnectionConfig
+from axai_pg import Organization, User, Document, Summary, Topic
+
+# Initialize the database connection
+conn_config = PostgresConnectionConfig(
+    host="localhost",  # or "postgres" if in same docker network
+    port=5432,
+    database="your_db",
+    username="your_user",
+    password="your_password"
+)
+DatabaseManager.initialize(conn_config)
+
+# Get a database session
+db = DatabaseManager.get_instance()
+```
+
+### Creating and Managing Data
+
+```python
+# Create an organization and a user
+with db.session_scope() as session:
+    # Create an organization
+    org = Organization(name="Test Organization")
+    session.add(org)
+    session.flush()  # This gets us the org.id
+    
+    # Create a user in that organization
+    user = User(
+        username="testuser",
+        email="test@example.com",
+        org_id=org.id
+    )
+    session.add(user)
+    session.flush()  # This gets us the user.id
+    
+    # Create a document
+    document = Document(
+        title="Test Document",
+        content="This is a test document content",
+        owner_id=user.id,
+        org_id=org.id,
+        document_type="text",
+        status="draft"
+    )
+    session.add(document)
+    session.flush()  # This gets us the document.id
+    
+    # Create a summary for the document
+    summary = Summary(
+        document_id=document.id,
+        content="This is a summary of the test document",
+        summary_type="abstract",
+        tool_agent="test-agent",
+        confidence_score=0.95
+    )
+    session.add(summary)
+    
+    # Create a topic
+    topic = Topic(
+        name="Test Topic",
+        description="A test topic",
+        keywords=["test", "example"],
+        extraction_method="manual",
+        global_importance=0.8
+    )
+    session.add(topic)
+    
+    # The session will automatically commit when the context manager exits
+```
+
+### Querying Data
+
+```python
+with db.session_scope() as session:
+    # Get all organizations
+    organizations = session.query(Organization).all()
+    
+    # Get a specific user
+    user = session.query(User).filter_by(username="testuser").first()
+    
+    # Get all documents for an organization
+    org_documents = session.query(Document).filter_by(org_id=org.id).all()
+    
+    # Get documents with their summaries
+    documents_with_summaries = (
+        session.query(Document, Summary)
+        .join(Summary)
+        .filter(Document.org_id == org.id)
+        .all()
+    )
+```
+
+### Using in FastAPI Applications
+
+```python
+from fastapi import FastAPI, Depends
+from axai_pg import DatabaseManager, PostgresConnectionConfig
+from axai_pg import Organization, User
+
+app = FastAPI()
+
+# Database dependency
+def get_db():
+    db = DatabaseManager.get_instance()
+    with db.session_scope() as session:
+        yield session
+
+@app.post("/organizations/")
+async def create_organization(org: dict, session = Depends(get_db)):
+    organization = Organization(name=org["name"])
+    session.add(organization)
+    session.flush()
+    return {"id": organization.id, "name": organization.name}
+
+@app.get("/users/{user_id}")
+async def get_user(user_id: int, session = Depends(get_db)):
+    user = session.query(User).filter_by(id=user_id).first()
+    return user
+```
+
+### Using in Django Applications
+
+```python
+# settings.py
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'your_db',
+        'USER': 'your_user',
+        'PASSWORD': 'your_password',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    }
+}
+
+# views.py
+from django.http import JsonResponse
+from axai_pg import DatabaseManager, PostgresConnectionConfig
+from axai_pg import Organization, User
+
+def create_organization(request):
+    db = DatabaseManager.get_instance()
+    with db.session_scope() as session:
+        org = Organization(name=request.POST['name'])
+        session.add(org)
+        session.flush()
+        return JsonResponse({'id': org.id, 'name': org.name})
+```
+
+## Models
+
+The package includes the following models:
+
+- Organization: Represents B2B tenants in the multi-tenant system
+- User: Users belonging to organizations
+- Document: Core document storage with ownership and metadata
+- DocumentVersion: Historical versions of documents
+- Summary: Document summaries generated by various tools/agents
+- Topic: Topics extracted from document content
+- GraphNode: Nodes for the graph representation of document connections
+- GraphRelationship: Relationships between nodes in the document graph
+
+## Development
+
+To install the package in development mode:
+
+```bash
+git clone https://github.com/your-org/axai-pg.git
+cd axai-pg
+pip install -e .
+```
+
+## Testing
+
+```bash
+# Run tests
+pytest tests/
+
+# Run with coverage
+pytest --cov=axai_pg tests/
+```
 
 ## Contributing
 
@@ -79,20 +206,4 @@ This project provides a sandbox environment for database operations, application
 
 ## License
 
-[Add License Information]
-
-## Documentation
-
-- [Database Usage Guide](docs/db_usage_guide.md)
-- [Backup and Recovery](docs/backup_recovery.md)
-- [Performance Analysis](docs/perf_analysis.md)
-- [Security Documentation](docs/security.md)
-
-## Support
-
-For support, please [add contact information or issue tracker link].
-
----
-
-<!-- Information for Solver -->
-<!-- This is a sandbox repository for new users to try out Solver. It has Python, Node.js, and Rust execution environments configured. The purpose is to provide a low-friction environment for users to experience Solver's capabilities before connecting their own repositories. -->
+MIT

@@ -1,0 +1,28 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install pipenv
+RUN pip install pipenv pytest pytest-cov pytest-asyncio
+
+# Copy dependency files
+COPY Pipfile Pipfile.lock ./
+
+# Install dependencies
+RUN pipenv install --system --deploy
+
+# Copy the rest of the application
+COPY . .
+
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# Command to run Docker integration tests
+CMD ["pytest", "tests/docker_integration/", "-v", "--cov=src", "--cov-report=term-missing", "-m", "docker_integration"] 
