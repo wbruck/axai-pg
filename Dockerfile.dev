@@ -8,14 +8,14 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Install pipenv and test dependencies
-RUN pip install pipenv pytest pytest-cov pytest-asyncio
+# Install development dependencies
+RUN pip install pipenv pytest pytest-cov pytest-asyncio black isort mypy
 
 # Copy dependency files
 COPY Pipfile Pipfile.lock ./
 
 # Install dependencies
-RUN pipenv install --system --deploy
+RUN pipenv install --system --deploy --dev
 
 # Copy the rest of the application
 COPY . .
@@ -23,12 +23,12 @@ COPY . .
 # Set environment variables
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
-ENV ENVIRONMENT=test
+ENV ENVIRONMENT=development
 
 # Create a non-root user
-RUN useradd -m -u 1000 testuser && \
-    chown -R testuser:testuser /app
-USER testuser
+RUN useradd -m -u 1000 devuser && \
+    chown -R devuser:devuser /app
+USER devuser
 
-# Default command to run all tests
-CMD ["pytest", "tests/", "-v", "--cov=src", "--cov-report=term-missing"] 
+# Default command (can be overridden in docker-compose)
+CMD ["/bin/bash"] 

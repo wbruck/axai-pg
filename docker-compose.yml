@@ -29,17 +29,24 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-test_password}
       - POSTGRES_DB=${POSTGRES_DB:-test_db}
       - POSTGRES_HOST=postgres
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
     volumes:
       - .:/app
+      - ./src:/app/src
+      - ./tests:/app/tests
+    command: ["/bin/bash", "/app/init-container-test.sh"]
     depends_on:
       postgres:
         condition: service_healthy
 
   # Development service that includes sample data
   dev:
+    profiles:
+      - dev
     build:
       context: .
-      dockerfile: Dockerfile.test
+      dockerfile: Dockerfile.dev
     container_name: axai-pg-dev
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-test_user}
@@ -47,8 +54,14 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-test_db}
       - POSTGRES_HOST=postgres
       - ENVIRONMENT=development
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+    ports:
+      - "8000:8000"  # For any development server if needed
     volumes:
       - .:/app
+      - ./src:/app/src
+      - ./tests:/app/tests
     depends_on:
       postgres:
         condition: service_healthy
