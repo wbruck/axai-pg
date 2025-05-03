@@ -188,12 +188,95 @@ pip install -e .
 
 ## Testing
 
+The project uses pytest for testing with a focus on integration tests that use a real PostgreSQL database. This approach ensures that tests closely mirror production behavior.
+
+### Running Tests
+
+1. Start the test database:
 ```bash
-# Run tests
-pytest tests/
+docker-compose -f docker-compose.test.yml up -d
+```
+
+2. Run the tests:
+```bash
+# Run all tests
+pytest --integration
+
+# Run specific test types
+pytest tests/integration/    # Integration tests only
+pytest tests/docker_integration/  # Docker tests only
 
 # Run with coverage
-pytest --cov=axai_pg tests/
+pytest --cov=axai_pg tests/ --integration
+```
+
+3. Clean up:
+```bash
+docker-compose -f docker-compose.test.yml down
+```
+
+### Test Configuration
+
+The test suite uses `conftest.py` to provide fixtures and configuration:
+
+- `db_session`: Database session with automatic transaction rollback
+- `test_data`: Sample data for testing
+
+### Database Setup
+
+The test database is configured using Docker Compose with the following settings:
+- Host: localhost
+- Port: 5432
+- Database: test_db
+- Username: postgres
+- Password: postgres
+
+You can override these settings by setting the `TEST_DATABASE_URL` environment variable.
+
+### Writing Tests
+
+```python
+@pytest.mark.integration
+def test_something(db_session):
+    # Create test data
+    user = User(username="testuser", email="test@example.com")
+    db_session.add(user)
+    db_session.commit()
+    
+    # Query the database
+    result = db_session.query(User).filter_by(username="testuser").first()
+    assert result is not None
+    assert result.email == "test@example.com"
+```
+
+### Test Organization
+
+- `tests/integration/`: Integration tests with real database
+- `tests/docker_integration/`: Docker-based tests
+- `tests/conftest.py`: Test configuration and fixtures
+
+### Database Reset
+
+For development and testing purposes, you can use the `reset_db.sh` script to quickly reset the database to a clean state. This script will:
+1. Drop the existing database
+2. Create a new database
+3. Apply the schema
+4. Optionally load sample data
+
+To use the reset script:
+
+```bash
+# Make sure the script is executable
+chmod +x reset_db.sh
+
+# Basic reset (schema only, no sample data)
+./reset_db.sh
+```
+
+Note: The script requires that the Docker container `axai-pg-test` is running. If you get an error about the container not running, make sure to start it first:
+
+```bash
+docker-compose -f docker-compose.test.yml up -d
 ```
 
 ## Contributing

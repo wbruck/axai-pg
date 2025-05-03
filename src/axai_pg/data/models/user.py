@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import UUID
+import uuid
 from ..config.database import Base
 
 class User(Base):
@@ -8,12 +10,12 @@ class User(Base):
     __tablename__ = 'users'
 
     # Primary Key
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     
     # Core Fields
     username = Column(Text, nullable=False, unique=True)
     email = Column(Text, nullable=False, unique=True)
-    org_id = Column(Integer, ForeignKey('organizations.id'), nullable=False)
+    org_id = Column(UUID(as_uuid=True), ForeignKey('organizations.id'), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 

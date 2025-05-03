@@ -1,7 +1,8 @@
 import pytest
+import asyncio
 from sqlalchemy import text
-from src.models.user import User
-from src.data.config.database import DatabaseManager, PostgresConnectionConfig
+from src.axai_pg.data.models.user import User
+from src.axai_pg.data.config.database import DatabaseManager, PostgresConnectionConfig
 
 @pytest.mark.docker_integration
 @pytest.mark.db

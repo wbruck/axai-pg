@@ -1,7 +1,7 @@
 import pytest
-from unittest.mock import Mock, patch
-from src.monitoring.database_monitoring import DatabaseMonitoring
-from src.monitoring.metrics import MetricsCollector
+from unittest.mock import MagicMock, patch
+from src.axai_pg.data.monitoring.database_monitor import DatabaseMonitor
+from src.axai_pg.data.monitoring.metrics_collector import MetricsCollector
 
 class TestDatabaseMonitoring:
     @pytest.fixture
@@ -14,7 +14,7 @@ class TestDatabaseMonitoring:
 
     @pytest.fixture
     def db_monitoring(self, mock_metrics_collector, mock_engine):
-        return DatabaseMonitoring(mock_metrics_collector, mock_engine)
+        return DatabaseMonitor(mock_metrics_collector, mock_engine)
 
     def test_connection_pool_metrics(self, db_monitoring, mock_metrics_collector):
         # Test active connections

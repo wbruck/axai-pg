@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import UUID
+import uuid
 from ..config.database import Base
 
 class Organization(Base):
@@ -8,7 +10,7 @@ class Organization(Base):
     __tablename__ = 'organizations'
 
     # Primary Key
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     
     # Core Fields
     name = Column(Text, nullable=False)

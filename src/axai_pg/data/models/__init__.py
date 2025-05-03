@@ -11,3 +11,17 @@ from .document import Document, DocumentVersion
 from .summary import Summary
 from .graph import GraphNode, GraphRelationship
 from .topic import Topic, DocumentTopic
+from .base import BaseModel
+from .security import SecurityPolicy
+
+__all__ = [
+    'Base',
+    'BaseModel',
+    'User',
+    'Organization',
+    'Document',
+    'Summary',
+    'Topic',
+    'GraphRelationship',
+    'SecurityPolicy'
+]

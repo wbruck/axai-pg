@@ -1,6 +1,6 @@
 from axai_pg import (
     Organization, User, Document, Summary, Topic,
-    DatabaseManager, PostgresConnectionConfig
+    DatabaseManager, PostgresConnectionConfig, GraphNode, GraphRelationship
 )
 import os
 
@@ -109,6 +109,54 @@ def add_sample_data():
             extracted_by_tool="gpt-4"
         )
         session.add_all([doc_topic1, doc_topic2])
+        session.flush()
+
+        # Create graph nodes for documents
+        graph_node1 = GraphNode(
+            document_id=doc1.id,
+            node_type="document",
+            name="Project Proposal Node",
+            description="Graph node representing the project proposal document",
+            properties={"keywords": ["AI", "business", "process"]},
+            created_by_tool="graph_builder_v1",
+            is_active=True
+        )
+        graph_node2 = GraphNode(
+            document_id=doc2.id,
+            node_type="document",
+            name="Research Findings Node",
+            description="Graph node representing the research findings document",
+            properties={"keywords": ["research", "experiments", "analysis"]},
+            created_by_tool="graph_builder_v1",
+            is_active=True
+        )
+        session.add_all([graph_node1, graph_node2])
+        session.flush()
+
+        # Create graph relationships between nodes
+        relationship1 = GraphRelationship(
+            source_node_id=graph_node1.id,
+            target_node_id=graph_node2.id,
+            relationship_type="references",
+            is_directed=True,
+            weight=0.85,
+            confidence_score=0.92,
+            properties={"context": "The proposal references the research findings"},
+            created_by_tool="relationship_detector_v1",
+            is_active=True
+        )
+        relationship2 = GraphRelationship(
+            source_node_id=graph_node2.id,
+            target_node_id=graph_node1.id,
+            relationship_type="supports",
+            is_directed=True,
+            weight=0.75,
+            confidence_score=0.88,
+            properties={"context": "The research findings support the proposal"},
+            created_by_tool="relationship_detector_v1",
+            is_active=True
+        )
+        session.add_all([relationship1, relationship2])
         session.flush()
 
         print("Sample data added successfully!")

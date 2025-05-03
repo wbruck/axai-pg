@@ -1,6 +1,6 @@
 import pytest
-from unittest.mock import Mock, patch
-from src.database.connection import DatabaseConnectionManager
+from unittest.mock import MagicMock, patch
+from src.axai_pg.data.config.database import DatabaseManager
 from sqlalchemy.exc import SQLAlchemyError
 
 class TestDatabaseConnectionManager:
@@ -16,7 +16,7 @@ class TestDatabaseConnectionManager:
 
     @pytest.fixture
     def connection_manager(self, mock_config):
-        return DatabaseConnectionManager(mock_config)
+        return DatabaseManager(mock_config)
 
     def test_connection_initialization(self, connection_manager, mock_config):
         # Test connection string construction

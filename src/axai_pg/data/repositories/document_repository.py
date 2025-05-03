@@ -3,8 +3,8 @@ from datetime import timedelta
 from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session, joinedload
 from .base_repository import BaseRepository
-from .metrics_decorator import with_metrics
 from .cache_manager import cache_query
+from .metrics_utils import track_metrics, with_metrics
 from ..models.document import Document
 
 @with_metrics

@@ -1,9 +1,8 @@
-"""Decorators for tracking metrics in repositories."""
+"""Utilities for metrics tracking in repositories."""
 
 import functools
 from datetime import datetime
 from typing import Callable, TypeVar, Type, Any
-from .enhanced_factory import RepositoryFactory
 from ..models.document import Document
 
 T = TypeVar('T')
@@ -18,7 +17,13 @@ def track_metrics(model_class: Type[T]):
     def decorator(func: Callable[..., Any]):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            factory = RepositoryFactory.get_instance()
+            if not args:
+                return await func(*args, **kwargs)
+            
+            repository = args[0]
+            if not hasattr(repository, '_metrics'):
+                return await func(*args, **kwargs)
+            
             model_map = {
                 Document: 'document',
                 # Add other model mappings as they're implemented
@@ -39,7 +44,7 @@ def track_metrics(model_class: Type[T]):
                 raise
             finally:
                 duration_ms = (datetime.now() - start_time).total_seconds() * 1000
-                metrics = factory._metrics.get(repo_key)
+                metrics = repository._metrics
                 if metrics:
                     metrics.record_operation(
                         duration_ms=duration_ms,
@@ -61,8 +66,7 @@ def with_metrics(cls: Type[T]) -> Type[T]:
     @functools.wraps(original_init)
     def init_wrapper(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
-        factory = RepositoryFactory.get_instance()
-        factory.register_metrics(cls)
+        self._metrics = None  # Initialize metrics to None
     
     cls.__init__ = init_wrapper
-    return cls
+    return cls 

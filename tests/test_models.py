@@ -1,4 +1,5 @@
 import pytest
+import uuid
 from axai_pg import Organization, User, Document
 from axai_pg import DatabaseManager, PostgresConnectionConfig
 
@@ -20,6 +21,7 @@ def test_create_organization(db):
         session.add(org)
         session.flush()
         assert org.id is not None
+        assert isinstance(org.id, uuid.UUID)
         assert org.name == "Test Org"
 
 def test_create_user_with_organization(db):
@@ -37,5 +39,7 @@ def test_create_user_with_organization(db):
         session.flush()
         
         assert user.id is not None
+        assert isinstance(user.id, uuid.UUID)
+        assert isinstance(user.org_id, uuid.UUID)
         assert user.org_id == org.id
         assert user.username == "testuser" 

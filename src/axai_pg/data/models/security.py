@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, UniqueConstraint, CheckConstraint
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, UniqueConstraint, CheckConstraint, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from ..config.database import Base
@@ -72,4 +72,27 @@ class RateLimit(Base):
     __table_args__ = (
         UniqueConstraint('user_id', 'action_type', 'window_start', 
                         name='uq_rate_limit'),
+    )
+
+class SecurityPolicy(Base):
+    """Model for security policies."""
+    __tablename__ = 'security_policies'
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(Text, nullable=False, unique=True)
+    description = Column(Text)
+    policy_type = Column(Text, nullable=False)
+    policy_data = Column(JSON, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by = Column(Integer, ForeignKey('users.id'))
+    
+    # Relationships
+    creator = relationship("User", foreign_keys=[created_by])
+    
+    __table_args__ = (
+        CheckConstraint(
+            "policy_type IN ('ACCESS_CONTROL', 'DATA_PROTECTION', 'AUDIT', 'RATE_LIMIT')",
+            name='valid_policy_type'
+        ),
     )

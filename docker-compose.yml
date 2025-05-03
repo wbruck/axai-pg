@@ -18,6 +18,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - shared-network
 
   test_runner:
     build:
@@ -69,3 +71,7 @@ services:
 
 volumes:
   postgres_data: 
+
+networks:
+  shared-network:
+    external: true

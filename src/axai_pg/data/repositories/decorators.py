@@ -4,6 +4,7 @@ import functools
 from datetime import datetime
 from typing import Callable, TypeVar, Type, Any
 from .enhanced_factory import RepositoryFactory
+from ..models.document import Document
 
 T = TypeVar('T')
 

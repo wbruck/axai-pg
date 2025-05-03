@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, CheckConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import UUID
+import uuid
 from ..config.database import Base
 
 class Document(Base):
@@ -8,13 +10,13 @@ class Document(Base):
     __tablename__ = 'documents'
 
     # Primary Key
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     
     # Core Fields
     title = Column(Text, nullable=False)
     content = Column(Text, nullable=False)
-    owner_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    org_id = Column(Integer, ForeignKey('organizations.id'), nullable=False)
+    owner_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    org_id = Column(UUID(as_uuid=True), ForeignKey('organizations.id'), nullable=False)
     document_type = Column(String(50), nullable=False)
     status = Column(String(20), nullable=False, default='draft')
     version = Column(Integer, nullable=False, default=1)
@@ -27,7 +29,7 @@ class Document(Base):
     source = Column(String(100))
     content_hash = Column(String(64))
     external_ref_id = Column(String(100))
-    doc_metadata = Column(JSON)
+    document_metadata = Column(JSON, name='metadata')
 
     # Relationships
     owner = relationship("User", back_populates="owned_documents")
@@ -36,6 +38,7 @@ class Document(Base):
     summaries = relationship("Summary", back_populates="document", lazy="dynamic")
     topics = relationship("DocumentTopic", back_populates="document", lazy="dynamic")
     graph_node = relationship("GraphNode", back_populates="document", uselist=False)
+    graph_relationships = relationship("GraphRelationship", back_populates="document", lazy="dynamic")
 
     def __repr__(self):
         return f"<Document(id={self.id}, title='{self.title}', version={self.version})>"
@@ -45,15 +48,15 @@ class DocumentVersion(Base):
     __tablename__ = 'document_versions'
 
     # Primary Key
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     
     # Core Fields
-    document_id = Column(Integer, ForeignKey('documents.id', ondelete='CASCADE'), nullable=False)
+    document_id = Column(UUID(as_uuid=True), ForeignKey('documents.id', ondelete='CASCADE'), nullable=False)
     version = Column(Integer, nullable=False)
     content = Column(Text, nullable=False)
     title = Column(Text, nullable=False)
     status = Column(String(20), nullable=False)
-    modified_by_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    modified_by_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     change_description = Column(Text)
     doc_metadata = Column(JSON)

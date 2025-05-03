@@ -2,7 +2,7 @@ from typing import TypeVar, Generic, Optional, Dict, Any, List
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from ..config.database import DatabaseManager
-from .metrics_decorator import track_metrics
+from .metrics_utils import track_metrics
 import threading
 
 T = TypeVar('T')

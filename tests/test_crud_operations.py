@@ -1,4 +1,5 @@
 import pytest
+import uuid
 from axai_pg import (
     Organization, User, Document, Summary, Topic,
     DatabaseManager, PostgresConnectionConfig
@@ -24,6 +25,7 @@ def test_create_organization_and_user(db):
         session.flush()
         
         assert org.id is not None
+        assert isinstance(org.id, uuid.UUID)
         assert org.name == "Test Organization"
         
         # Create user
@@ -36,6 +38,8 @@ def test_create_organization_and_user(db):
         session.flush()
         
         assert user.id is not None
+        assert isinstance(user.id, uuid.UUID)
+        assert isinstance(user.org_id, uuid.UUID)
         assert user.org_id == org.id
         assert user.username == "testuser"
         
@@ -71,6 +75,9 @@ def test_create_document_with_summary(db):
         session.flush()
         
         assert document.id is not None
+        assert isinstance(document.id, uuid.UUID)
+        assert isinstance(document.owner_id, uuid.UUID)
+        assert isinstance(document.org_id, uuid.UUID)
         assert document.owner_id == user.id
         assert document.org_id == org.id
         
@@ -86,6 +93,8 @@ def test_create_document_with_summary(db):
         session.flush()
         
         assert summary.id is not None
+        assert isinstance(summary.id, uuid.UUID)
+        assert isinstance(summary.document_id, uuid.UUID)
         assert summary.document_id == document.id
         assert summary.confidence_score == 0.95
 
@@ -127,6 +136,7 @@ def test_create_topic_and_associate_with_document(db):
         session.flush()
         
         assert topic.id is not None
+        assert isinstance(topic.id, uuid.UUID)
         assert topic.name == "Test Topic"
         assert topic.keywords == ["test", "example"]
         
@@ -142,6 +152,9 @@ def test_create_topic_and_associate_with_document(db):
         session.flush()
         
         assert doc_topic.id is not None
+        assert isinstance(doc_topic.id, uuid.UUID)
+        assert isinstance(doc_topic.document_id, uuid.UUID)
+        assert isinstance(doc_topic.topic_id, uuid.UUID)
         assert doc_topic.document_id == document.id
         assert doc_topic.topic_id == topic.id
         assert doc_topic.relevance_score == 0.9
@@ -176,17 +189,21 @@ def test_query_operations(db):
         # Get organization by name
         queried_org = session.query(Organization).filter_by(name="Test Org").first()
         assert queried_org.id == org.id
+        assert isinstance(queried_org.id, uuid.UUID)
         
         # Get user by username
         queried_user = session.query(User).filter_by(username="testuser").first()
         assert queried_user.id == user.id
+        assert isinstance(queried_user.id, uuid.UUID)
         
         # Get documents for organization
         org_documents = session.query(Document).filter_by(org_id=org.id).all()
         assert len(org_documents) == 1
         assert org_documents[0].id == document.id
+        assert isinstance(org_documents[0].id, uuid.UUID)
         
         # Get documents owned by user
         user_documents = session.query(Document).filter_by(owner_id=user.id).all()
         assert len(user_documents) == 1
-        assert user_documents[0].id == document.id 
+        assert user_documents[0].id == document.id
+        assert isinstance(user_documents[0].id, uuid.UUID) 

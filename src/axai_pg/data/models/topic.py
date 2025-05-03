@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, ARRAY, Numeric, Boolean, CheckConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import UUID
+import uuid
 from ..config.database import Base
 
 class Topic(Base):
@@ -8,13 +10,13 @@ class Topic(Base):
     __tablename__ = 'topics'
 
     # Primary Key
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     
     # Core Fields
     name = Column(String(100), nullable=False, unique=True)
     description = Column(Text)
     keywords = Column(ARRAY(Text))
-    parent_topic_id = Column(Integer, ForeignKey('topics.id', ondelete='SET NULL'))
+    parent_topic_id = Column(UUID(as_uuid=True), ForeignKey('topics.id', ondelete='SET NULL'))
     extraction_method = Column(String(50))
     global_importance = Column(Numeric(5, 4))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -42,11 +44,11 @@ class DocumentTopic(Base):
     __tablename__ = 'document_topics'
 
     # Primary Key
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     
     # Core Fields
-    document_id = Column(Integer, ForeignKey('documents.id', ondelete='CASCADE'), nullable=False)
-    topic_id = Column(Integer, ForeignKey('topics.id', ondelete='CASCADE'), nullable=False)
+    document_id = Column(UUID(as_uuid=True), ForeignKey('documents.id', ondelete='CASCADE'), nullable=False)
+    topic_id = Column(UUID(as_uuid=True), ForeignKey('topics.id', ondelete='CASCADE'), nullable=False)
     relevance_score = Column(Numeric(5, 4), nullable=False)
     context = Column(JSON)
     extracted_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

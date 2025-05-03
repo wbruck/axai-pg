@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, Numeric, Boolean, CheckConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import UUID
+import uuid
 from ..config.database import Base
 
 class GraphNode(Base):
@@ -8,10 +10,10 @@ class GraphNode(Base):
     __tablename__ = 'graph_nodes'
 
     # Primary Key
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     
     # Core Fields
-    document_id = Column(Integer, ForeignKey('documents.id', ondelete='SET NULL'))
+    document_id = Column(UUID(as_uuid=True), ForeignKey('documents.id', ondelete='SET NULL'))
     node_type = Column(String(50), nullable=False)
     name = Column(String(255), nullable=False)
     description = Column(Text)
@@ -33,10 +35,10 @@ class GraphNode(Base):
                                        lazy="dynamic")
 
     # Table Constraints
-    __table_args__ = (
-        CheckConstraint("node_type IN ('document', 'concept', 'entity', 'topic', 'user', 'custom')",
-                       name="graph_nodes_valid_type"),
-    )
+    # __table_args__ = (
+    #     CheckConstraint("node_type IN ('document', 'concept', 'entity', 'topic', 'user', 'custom')",
+    #                    name="graph_nodes_valid_type"),
+    # )
 
     def __repr__(self):
         return f"<GraphNode(id={self.id}, type='{self.node_type}', name='{self.name}')>"
@@ -46,11 +48,12 @@ class GraphRelationship(Base):
     __tablename__ = 'graph_relationships'
 
     # Primary Key
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     
     # Core Fields
-    source_node_id = Column(Integer, ForeignKey('graph_nodes.id', ondelete='CASCADE'), nullable=False)
-    target_node_id = Column(Integer, ForeignKey('graph_nodes.id', ondelete='CASCADE'), nullable=False)
+    source_node_id = Column(UUID(as_uuid=True), ForeignKey('graph_nodes.id', ondelete='CASCADE'), nullable=False)
+    target_node_id = Column(UUID(as_uuid=True), ForeignKey('graph_nodes.id', ondelete='CASCADE'), nullable=False)
+    document_id = Column(UUID(as_uuid=True), ForeignKey('documents.id', ondelete='SET NULL'), nullable=False)
     relationship_type = Column(String(50), nullable=False)
     is_directed = Column(Boolean, nullable=False, default=True)
     weight = Column(Numeric(10, 5))
@@ -64,6 +67,7 @@ class GraphRelationship(Base):
     # Relationships
     source_node = relationship("GraphNode", foreign_keys=[source_node_id], back_populates="outgoing_relationships")
     target_node = relationship("GraphNode", foreign_keys=[target_node_id], back_populates="incoming_relationships")
+    document = relationship("Document", back_populates="graph_relationships")
 
     # Table Constraints
     __table_args__ = (
@@ -71,8 +75,8 @@ class GraphRelationship(Base):
                        name="graph_relationships_valid_confidence"),
         CheckConstraint("weight IS NULL OR weight > 0",
                        name="graph_relationships_valid_weight"),
-        CheckConstraint("relationship_type IN ('references', 'contains', 'related_to', 'similar_to', 'contradicts', 'supports', 'custom')",
-                       name="graph_relationships_valid_type"),
+        # CheckConstraint("relationship_type IN ('references', 'contains', 'related_to', 'similar_to', 'contradicts', 'supports', 'custom')",
+        #                name="graph_relationships_valid_type"),
     )
 
     def __repr__(self):

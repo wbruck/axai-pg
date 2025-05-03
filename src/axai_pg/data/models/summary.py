@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, Numeric, CheckConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import UUID
+import uuid
 from ..config.database import Base
 
 class Summary(Base):
@@ -8,10 +10,10 @@ class Summary(Base):
     __tablename__ = 'summaries'
 
     # Primary Key
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     
     # Core Fields
-    document_id = Column(Integer, ForeignKey('documents.id', ondelete='CASCADE'), nullable=False)
+    document_id = Column(UUID(as_uuid=True), ForeignKey('documents.id', ondelete='CASCADE'), nullable=False)
     content = Column(Text, nullable=False)
     summary_type = Column(String(50), nullable=False)
     target_audience = Column(String(50))

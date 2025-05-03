@@ -6,6 +6,9 @@
 -- - Topic modeling and document clustering
 -- - Tool/agent attribution for content generation
 
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 -- Function to automatically update timestamps
 CREATE OR REPLACE FUNCTION update_modified_column()
 RETURNS TRIGGER AS $$
@@ -14,9 +17,10 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
 -- Organization and user tables
 CREATE TABLE organizations (
-  id SERIAL PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -32,10 +36,10 @@ FOR EACH ROW
 EXECUTE FUNCTION update_modified_column();
 
 CREATE TABLE users (
-  id SERIAL PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   username TEXT NOT NULL UNIQUE,
   email TEXT NOT NULL UNIQUE,
-  org_id INTEGER NOT NULL REFERENCES organizations(id),
+  org_id UUID NOT NULL REFERENCES organizations(id),
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   CONSTRAINT users_username_not_empty CHECK (length(trim(username)) > 0),
@@ -52,11 +56,11 @@ EXECUTE FUNCTION update_modified_column();
 
 -- Document table with core attributes
 CREATE TABLE documents (
-  id SERIAL PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   title TEXT NOT NULL,
   content TEXT NOT NULL,  -- Full document text
-  owner_id INTEGER NOT NULL REFERENCES users(id),
-  org_id INTEGER NOT NULL REFERENCES organizations(id),
+  owner_id UUID NOT NULL REFERENCES users(id),
+  org_id UUID NOT NULL REFERENCES organizations(id),
   document_type VARCHAR(50) NOT NULL,
   status VARCHAR(20) NOT NULL DEFAULT 'draft',
   version INTEGER NOT NULL DEFAULT 1,
@@ -86,8 +90,8 @@ EXECUTE FUNCTION update_modified_column();
 
 -- Summaries table
 CREATE TABLE summaries (
-  id SERIAL PRIMARY KEY,
-  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   summary_type VARCHAR(50) NOT NULL,
   target_audience VARCHAR(50),
@@ -117,8 +121,8 @@ EXECUTE FUNCTION update_modified_column();
 
 -- Graph structure tables
 CREATE TABLE graph_nodes (
-  id SERIAL PRIMARY KEY,
-  document_id INTEGER REFERENCES documents(id) ON DELETE SET NULL,  -- NULL if not associated with a document
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  document_id UUID REFERENCES documents(id) ON DELETE SET NULL,  -- NULL if not associated with a document
   node_type VARCHAR(50) NOT NULL,
   name VARCHAR(255) NOT NULL,
   description TEXT,
@@ -127,8 +131,8 @@ CREATE TABLE graph_nodes (
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   created_by_tool VARCHAR(100) NOT NULL,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
-  CONSTRAINT graph_nodes_name_not_empty CHECK (length(trim(name)) > 0),
-  CONSTRAINT graph_nodes_valid_type CHECK (node_type IN ('document', 'concept', 'entity', 'topic', 'user', 'custom'))
+  CONSTRAINT graph_nodes_name_not_empty CHECK (length(trim(name)) > 0)
+   -- CONSTRAINT graph_nodes_valid_type CHECK (node_type IN ('document', 'concept', 'entity', 'topic', 'user', 'custom'))
 );
 
 COMMENT ON TABLE graph_nodes IS 'Nodes for the graph representation of document connections';
@@ -140,9 +144,10 @@ FOR EACH ROW
 EXECUTE FUNCTION update_modified_column();
 
 CREATE TABLE graph_relationships (
-  id SERIAL PRIMARY KEY,
-  source_node_id INTEGER NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
-  target_node_id INTEGER NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  source_node_id UUID NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+  target_node_id UUID NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+  document_id UUID REFERENCES documents(id) ON DELETE SET NULL,
   relationship_type VARCHAR(50) NOT NULL,
   is_directed BOOLEAN NOT NULL DEFAULT TRUE,
   weight DECIMAL(10,5),
@@ -153,8 +158,8 @@ CREATE TABLE graph_relationships (
   created_by_tool VARCHAR(100) NOT NULL,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   CONSTRAINT graph_relationships_valid_confidence CHECK (confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)),
-  CONSTRAINT graph_relationships_valid_weight CHECK (weight IS NULL OR weight > 0),
-  CONSTRAINT graph_relationships_valid_type CHECK (relationship_type IN ('references', 'contains', 'related_to', 'similar_to', 'contradicts', 'supports', 'custom'))
+  CONSTRAINT graph_relationships_valid_weight CHECK (weight IS NULL OR weight > 0)
+  -- CONSTRAINT graph_relationships_valid_type CHECK (relationship_type IN ('references', 'contains', 'related_to', 'similar_to', 'contradicts', 'supports', 'custom'))
 );
 
 COMMENT ON TABLE graph_relationships IS 'Relationships between nodes in the document graph structure';
@@ -167,11 +172,11 @@ EXECUTE FUNCTION update_modified_column();
 
 -- Topics and clusters tables
 CREATE TABLE topics (
-  id SERIAL PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name VARCHAR(100) NOT NULL UNIQUE,
   description TEXT,
   keywords TEXT[],
-  parent_topic_id INTEGER REFERENCES topics(id) ON DELETE SET NULL,
+  parent_topic_id UUID REFERENCES topics(id) ON DELETE SET NULL,
   extraction_method VARCHAR(50),
   global_importance DECIMAL(5,4),
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -192,9 +197,9 @@ FOR EACH ROW
 EXECUTE FUNCTION update_modified_column();
 
 CREATE TABLE document_topics (
-  id SERIAL PRIMARY KEY,
-  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-  topic_id INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  topic_id UUID NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
   relevance_score DECIMAL(5,4) NOT NULL,
   context JSONB,
   extracted_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -213,7 +218,7 @@ FOR EACH ROW
 EXECUTE FUNCTION update_modified_column();
 
 CREATE TABLE document_clusters (
-  id SERIAL PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name VARCHAR(100) NOT NULL,
   description TEXT,
   algorithm VARCHAR(50) NOT NULL,
@@ -237,9 +242,9 @@ FOR EACH ROW
 EXECUTE FUNCTION update_modified_column();
 
 CREATE TABLE document_cluster_members (
-  id SERIAL PRIMARY KEY,
-  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-  cluster_id INTEGER NOT NULL REFERENCES document_clusters(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  cluster_id UUID NOT NULL REFERENCES document_clusters(id) ON DELETE CASCADE,
   membership_score DECIMAL(5,4) NOT NULL,
   distance_from_centroid DECIMAL(10,6),
   assignment_timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -260,13 +265,13 @@ EXECUTE FUNCTION update_modified_column();
 
 -- Document version history
 CREATE TABLE document_versions (
-  id SERIAL PRIMARY KEY,
-  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
   version INTEGER NOT NULL,
   content TEXT NOT NULL,
   title TEXT NOT NULL,
   status VARCHAR(20) NOT NULL,
-  modified_by INTEGER NOT NULL REFERENCES users(id),
+  modified_by UUID NOT NULL REFERENCES users(id),
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   change_description TEXT,
   metadata JSONB,
@@ -302,6 +307,7 @@ CREATE INDEX idx_graph_relationships_target ON graph_relationships(target_node_i
 CREATE INDEX idx_graph_relationships_type ON graph_relationships(relationship_type);
 CREATE INDEX idx_graph_relationships_is_active ON graph_relationships(is_active) WHERE is_active = TRUE;
 CREATE INDEX idx_graph_relationships_created_by ON graph_relationships(created_by_tool);
+CREATE INDEX idx_graph_relationships_document ON graph_relationships(document_id) WHERE document_id IS NOT NULL;
 
 CREATE INDEX idx_topics_parent ON topics(parent_topic_id) WHERE parent_topic_id IS NOT NULL;
 CREATE INDEX idx_topics_is_active ON topics(is_active) WHERE is_active = TRUE;
