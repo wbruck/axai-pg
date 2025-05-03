@@ -1,0 +1,29 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+psycopg2-binary = "*"
+SQLAlchemy = "*"
+pydantic = "*"
+python-dotenv = "*"
+loguru = "*"
+psutil = "*"
+
+[dev-packages]
+# Testing
+pytest = "*"
+pytest-cov = "*"
+pytest-asyncio = "*"
+# Code quality
+black = "*"
+flake8 = "*"
+mypy = "*"
+pre-commit = "*"
+# Documentation
+sphinx = "*"
+sphinx-rtd-theme = "*"
+
+[requires]
+python_version = "3.12" 

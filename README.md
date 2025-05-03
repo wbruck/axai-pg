@@ -1,10 +1,292 @@
-# Solver Sandbox
+# AXAI PostgreSQL Models
 
-This is your sandbox environment for exploring Solver's capabilities. You can create files, implement features, fix bugs, or have concepts explained - all without affecting any production repositories.
+This package provides PostgreSQL models and database management for AXAI applications. It includes a comprehensive set of models for managing organizations, users, documents, topics, and their relationships.
 
-When you're finished, you can download your work as a ZIP file using the download button in the session header.
+## Installation
 
----
+```bash
+pip install axai-pg
+```
 
-<!-- Information for Solver -->
-<!-- This is a sandbox repository for new users to try out Solver. It has Python, Node.js, and Rust execution environments configured. The purpose is to provide a low-friction environment for users to experience Solver's capabilities before connecting their own repositories. -->
+## Usage
+
+### Basic Setup
+
+```python
+from axai_pg import DatabaseManager, PostgresConnectionConfig
+from axai_pg import Organization, User, Document, Summary, Topic
+
+# Initialize the database connection
+conn_config = PostgresConnectionConfig(
+    host="localhost",  # or "postgres" if in same docker network
+    port=5432,
+    database="your_db",
+    username="your_user",
+    password="your_password"
+)
+DatabaseManager.initialize(conn_config)
+
+# Get a database session
+db = DatabaseManager.get_instance()
+```
+
+### Creating and Managing Data
+
+```python
+# Create an organization and a user
+with db.session_scope() as session:
+    # Create an organization
+    org = Organization(name="Test Organization")
+    session.add(org)
+    session.flush()  # This gets us the org.id
+    
+    # Create a user in that organization
+    user = User(
+        username="testuser",
+        email="test@example.com",
+        org_id=org.id
+    )
+    session.add(user)
+    session.flush()  # This gets us the user.id
+    
+    # Create a document
+    document = Document(
+        title="Test Document",
+        content="This is a test document content",
+        owner_id=user.id,
+        org_id=org.id,
+        document_type="text",
+        status="draft"
+    )
+    session.add(document)
+    session.flush()  # This gets us the document.id
+    
+    # Create a summary for the document
+    summary = Summary(
+        document_id=document.id,
+        content="This is a summary of the test document",
+        summary_type="abstract",
+        tool_agent="test-agent",
+        confidence_score=0.95
+    )
+    session.add(summary)
+    
+    # Create a topic
+    topic = Topic(
+        name="Test Topic",
+        description="A test topic",
+        keywords=["test", "example"],
+        extraction_method="manual",
+        global_importance=0.8
+    )
+    session.add(topic)
+    
+    # The session will automatically commit when the context manager exits
+```
+
+### Querying Data
+
+```python
+with db.session_scope() as session:
+    # Get all organizations
+    organizations = session.query(Organization).all()
+    
+    # Get a specific user
+    user = session.query(User).filter_by(username="testuser").first()
+    
+    # Get all documents for an organization
+    org_documents = session.query(Document).filter_by(org_id=org.id).all()
+    
+    # Get documents with their summaries
+    documents_with_summaries = (
+        session.query(Document, Summary)
+        .join(Summary)
+        .filter(Document.org_id == org.id)
+        .all()
+    )
+```
+
+### Using in FastAPI Applications
+
+```python
+from fastapi import FastAPI, Depends
+from axai_pg import DatabaseManager, PostgresConnectionConfig
+from axai_pg import Organization, User
+
+app = FastAPI()
+
+# Database dependency
+def get_db():
+    db = DatabaseManager.get_instance()
+    with db.session_scope() as session:
+        yield session
+
+@app.post("/organizations/")
+async def create_organization(org: dict, session = Depends(get_db)):
+    organization = Organization(name=org["name"])
+    session.add(organization)
+    session.flush()
+    return {"id": organization.id, "name": organization.name}
+
+@app.get("/users/{user_id}")
+async def get_user(user_id: int, session = Depends(get_db)):
+    user = session.query(User).filter_by(id=user_id).first()
+    return user
+```
+
+### Using in Django Applications
+
+```python
+# settings.py
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'your_db',
+        'USER': 'your_user',
+        'PASSWORD': 'your_password',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    }
+}
+
+# views.py
+from django.http import JsonResponse
+from axai_pg import DatabaseManager, PostgresConnectionConfig
+from axai_pg import Organization, User
+
+def create_organization(request):
+    db = DatabaseManager.get_instance()
+    with db.session_scope() as session:
+        org = Organization(name=request.POST['name'])
+        session.add(org)
+        session.flush()
+        return JsonResponse({'id': org.id, 'name': org.name})
+```
+
+## Models
+
+The package includes the following models:
+
+- Organization: Represents B2B tenants in the multi-tenant system
+- User: Users belonging to organizations
+- Document: Core document storage with ownership and metadata
+- DocumentVersion: Historical versions of documents
+- Summary: Document summaries generated by various tools/agents
+- Topic: Topics extracted from document content
+- GraphNode: Nodes for the graph representation of document connections
+- GraphRelationship: Relationships between nodes in the document graph
+
+## Development
+
+To install the package in development mode:
+
+```bash
+git clone https://github.com/your-org/axai-pg.git
+cd axai-pg
+pip install -e .
+```
+
+## Testing
+
+The project uses pytest for testing with a focus on integration tests that use a real PostgreSQL database. This approach ensures that tests closely mirror production behavior.
+
+### Running Tests
+
+1. Start the test database:
+```bash
+docker-compose -f docker-compose.test.yml up -d
+```
+
+2. Run the tests:
+```bash
+# Run all tests
+pytest --integration
+
+# Run specific test types
+pytest tests/integration/    # Integration tests only
+pytest tests/docker_integration/  # Docker tests only
+
+# Run with coverage
+pytest --cov=axai_pg tests/ --integration
+```
+
+3. Clean up:
+```bash
+docker-compose -f docker-compose.test.yml down
+```
+
+### Test Configuration
+
+The test suite uses `conftest.py` to provide fixtures and configuration:
+
+- `db_session`: Database session with automatic transaction rollback
+- `test_data`: Sample data for testing
+
+### Database Setup
+
+The test database is configured using Docker Compose with the following settings:
+- Host: localhost
+- Port: 5432
+- Database: test_db
+- Username: postgres
+- Password: postgres
+
+You can override these settings by setting the `TEST_DATABASE_URL` environment variable.
+
+### Writing Tests
+
+```python
+@pytest.mark.integration
+def test_something(db_session):
+    # Create test data
+    user = User(username="testuser", email="test@example.com")
+    db_session.add(user)
+    db_session.commit()
+    
+    # Query the database
+    result = db_session.query(User).filter_by(username="testuser").first()
+    assert result is not None
+    assert result.email == "test@example.com"
+```
+
+### Test Organization
+
+- `tests/integration/`: Integration tests with real database
+- `tests/docker_integration/`: Docker-based tests
+- `tests/conftest.py`: Test configuration and fixtures
+
+### Database Reset
+
+For development and testing purposes, you can use the `reset_db.sh` script to quickly reset the database to a clean state. This script will:
+1. Drop the existing database
+2. Create a new database
+3. Apply the schema
+4. Optionally load sample data
+
+To use the reset script:
+
+```bash
+# Make sure the script is executable
+chmod +x reset_db.sh
+
+# Basic reset (schema only, no sample data)
+./reset_db.sh
+```
+
+Note: The script requires that the Docker container `axai-pg-test` is running. If you get an error about the container not running, make sure to start it first:
+
+```bash
+docker-compose -f docker-compose.test.yml up -d
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+
+## License
+
+MIT
