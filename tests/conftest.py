@@ -80,7 +80,8 @@ def db_session(test_engine):
     yield session
 
     session.close()
-    transaction.rollback()
+    if transaction.is_active:
+        transaction.rollback()
     connection.close()
 
 # Alias for backward compatibility with tests that use real_db_session

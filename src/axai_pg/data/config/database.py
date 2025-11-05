@@ -1,14 +1,16 @@
 from typing import Dict, Optional, Callable
 from dataclasses import dataclass
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from sqlalchemy.engine import Engine
 from contextlib import contextmanager
 import os
 import time
 import logging
 
-Base = declarative_base()
+class Base(DeclarativeBase):
+    """Base class for all database models."""
+    pass
 
 # Monitoring hooks - will be set by monitoring system
 _metrics_handler: Optional[Callable] = None
