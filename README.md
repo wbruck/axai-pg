@@ -17,11 +17,15 @@ pip install axai-pg
 git clone <repository-url>
 cd axai-pg
 
-# Install dependencies
-pip install -r requirements.txt
+# Install in editable mode with all dev dependencies
+pip install -e ".[dev]"
 
-# Or install in editable mode with testing extras
+# Or install with just testing extras
 pip install -e ".[testing]"
+
+# Using Hatch (recommended for contributors)
+pip install hatch
+hatch env create  # Create default environment
 ```
 
 ### Prerequisites
@@ -200,11 +204,56 @@ The package includes the following models:
 
 ## Development
 
+### Setup
+
 To install the package in development mode:
 
 ```bash
 git clone https://github.com/your-org/axai-pg.git
 cd axai-pg
+
+# Option 1: Using pip
+pip install -e ".[dev]"
+
+# Option 2: Using Hatch (recommended for contributors)
+pip install hatch
+hatch env create
+```
+
+### Running Tests
+
+```bash
+# Using the test script (recommended)
+./run_tests.sh
+
+# Using Hatch
+hatch run test          # Run integration tests
+hatch run test-all      # Run all tests
+
+# Using pytest directly
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/integration/ -v --integration
+```
+
+### Code Quality
+
+```bash
+# Format code
+hatch run lint:fmt      # Auto-format with black
+
+# Check formatting and linting
+hatch run lint:check    # Check black and flake8
+
+# Type checking
+hatch run types:check   # Run mypy
+```
+
+### Building
+
+```bash
+# Build package
+hatch build
+
+# Install locally
 pip install -e .
 ```
 
@@ -216,7 +265,7 @@ All tests use a real PostgreSQL database for accuracy and reliability. The datab
 
 1. **Install dependencies**:
 ```bash
-pip install -r requirements.txt
+pip install -e ".[dev]"
 ```
 
 2. **Start the test database**:
@@ -226,14 +275,18 @@ docker-compose -f docker-compose.standalone-test.yml up -d
 
 3. **Run the tests**:
 ```bash
-# Run all integration tests
-pytest tests/integration/ -v --integration
+# Using the test script (easiest)
+./run_tests.sh
+
+# Using Hatch
+hatch run test          # Run integration tests with coverage
+hatch run test-all      # Run all tests
+
+# Using pytest directly
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/integration/ -v --integration
 
 # Run specific test file
 pytest tests/integration/test_schema_creation.py -v --integration
-
-# Run with coverage (if pytest-cov is installed)
-pytest tests/ -v --integration --cov=src --cov-report=term-missing
 ```
 
 4. **Clean up**:
@@ -314,27 +367,22 @@ def test_something(db_session):
 
 ### Database Reset
 
-For development and testing purposes, you can use the `reset_db.sh` script to quickly reset the database to a clean state. This script will:
-1. Drop the existing database
-2. Create a new database
-3. Apply the schema
-4. Optionally load sample data
+For development and testing purposes, you can use the `DatabaseInitializer` utility to reset the database:
 
-To use the reset script:
+```python
+from axai_pg.utils import DatabaseInitializer, DatabaseInitializerConfig
+from axai_pg.data.config.database import PostgresConnectionConfig
 
-```bash
-# Make sure the script is executable
-chmod +x reset_db.sh
+config = DatabaseInitializerConfig(
+    connection_config=PostgresConnectionConfig.from_env(),
+    auto_create_db=True
+)
 
-# Basic reset (schema only, no sample data)
-./reset_db.sh
+db_init = DatabaseInitializer(config)
+db_init.reset_database()  # Drops and recreates database with schema
 ```
 
-Note: The script requires that the Docker container `axai-pg-test` is running. If you get an error about the container not running, make sure to start it first:
-
-```bash
-docker-compose -f docker-compose.test.yml up -d
-```
+Or use the test fixtures for pytest-based workflows (see "Integration Testing with Other Systems" section).
 
 ## Integration Testing with Other Systems
 
@@ -512,6 +560,47 @@ with db_manager.session_scope() as session:
 db_init.teardown_database()
 ```
 
+## Project Structure
+
+```
+axai-pg/
+├── CHANGELOG.md          # Version history and changes
+├── CLAUDE.md             # Claude Code instructions
+├── README.md             # This file
+├── archive/              # Historical artifacts
+│   ├── migration/        # TypeScript to Python migration scripts
+│   ├── TODO.md           # Archived TODO list
+│   └── CURRENT_PLAN.md   # Archived migration plan
+├── docs/
+│   ├── operations/       # Database usage documentation
+│   │   └── db_usage_guide.md
+│   ├── schema/           # Schema documentation
+│   │   └── schema_readme.md
+│   └── integration_spec.md
+├── src/axai_pg/
+│   ├── data/
+│   │   ├── config/       # Database configuration
+│   │   ├── models/       # SQLAlchemy models (single source of truth)
+│   │   ├── repositories/ # Repository pattern implementations
+│   │   ├── monitoring/   # Metrics and monitoring
+│   │   └── security/     # Security and multi-tenancy
+│   ├── utils/            # Utilities (schema builder, initializer)
+│   └── testing/          # Test fixtures for external systems
+├── tests/
+│   ├── integration/      # All integration tests
+│   └── conftest.py       # Pytest configuration and fixtures
+├── sql/                  # Legacy SQL files (deprecated, kept for reference)
+└── examples/             # Usage examples
+```
+
+## Documentation
+
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history and release notes
+- **[CLAUDE.md](CLAUDE.md)** - Project overview and development guidelines
+- **[docs/operations/db_usage_guide.md](docs/operations/db_usage_guide.md)** - Database usage patterns and best practices
+- **[docs/schema/](docs/schema/)** - Schema design and relationships
+- **[docs/integration_spec.md](docs/integration_spec.md)** - External system integration guide
+
 ## Contributing
 
 1. Fork the repository
@@ -519,6 +608,8 @@ db_init.teardown_database()
 3. Commit your changes
 4. Push to the branch
 5. Create a Pull Request
+
+See [CLAUDE.md](CLAUDE.md) for development guidelines and common commands.
 
 ## License
 

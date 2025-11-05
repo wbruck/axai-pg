@@ -1,5 +1,22 @@
 version: '3.8'
 
+# Simplified PostgreSQL setup for local development and testing
+# For integration tests, use docker-compose.standalone-test.yml instead
+#
+# This compose file provides a PostgreSQL database that can be used for
+# local development. Schema is created programmatically via SQLAlchemy
+# using PostgreSQLSchemaBuilder.
+#
+# Usage:
+#   # Start PostgreSQL
+#   docker-compose up -d
+#
+#   # Stop and remove
+#   docker-compose down
+#
+#   # Stop and remove with volumes (complete cleanup)
+#   docker-compose down -v
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -12,66 +29,12 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init-scripts:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-test_user} -d ${POSTGRES_DB:-test_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
-    networks:
-      - shared-network
-
-  test_runner:
-    build:
-      context: .
-      dockerfile: Dockerfile.test
-    container_name: axai-pg-test-runner
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER:-test_user}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-test_password}
-      - POSTGRES_DB=${POSTGRES_DB:-test_db}
-      - POSTGRES_HOST=postgres
-      - PYTHONPATH=/app
-      - PYTHONUNBUFFERED=1
-    volumes:
-      - .:/app
-      - ./src:/app/src
-      - ./tests:/app/tests
-    command: ["/bin/bash", "/app/init-container-test.sh"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  # Development service that includes sample data
-  dev:
-    profiles:
-      - dev
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    container_name: axai-pg-dev
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER:-test_user}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-test_password}
-      - POSTGRES_DB=${POSTGRES_DB:-test_db}
-      - POSTGRES_HOST=postgres
-      - ENVIRONMENT=development
-      - PYTHONUNBUFFERED=1
-      - PYTHONPATH=/app
-    ports:
-      - "8000:8000"  # For any development server if needed
-    volumes:
-      - .:/app
-      - ./src:/app/src
-      - ./tests:/app/tests
-    depends_on:
-      postgres:
-        condition: service_healthy
-    command: ["/bin/bash", "/app/init-container-dev.sh"]
+    restart: unless-stopped
 
 volumes:
-  postgres_data: 
-
-networks:
-  shared-network:
-    external: true
+  postgres_data:
