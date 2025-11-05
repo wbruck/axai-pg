@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime
+from sqlalchemy import Column, Integer, String, Text, DateTime, CheckConstraint, Index
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
@@ -6,24 +6,30 @@ import uuid
 from ..config.database import Base
 
 class Organization(Base):
-    """Organizations represent B2B tenants in the multi-tenant system."""
+    """
+    Organizations represent B2B tenants in the multi-tenant system.
+
+    Each organization is a separate tenant with its own users and documents.
+    This model implements multi-tenancy at the organization level.
+    """
     __tablename__ = 'organizations'
 
     # Primary Key
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    
+
     # Core Fields
     name = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     # Relationships
-    users = relationship("User", back_populates="organization", lazy="dynamic")
-    documents = relationship("Document", back_populates="organization", lazy="dynamic")
+    users = relationship("User", back_populates="organization", lazy="dynamic", cascade="all, delete-orphan")
+    documents = relationship("Document", back_populates="organization", lazy="dynamic", cascade="all, delete-orphan")
 
-    # Table Constraints - SQLAlchemy will read these from the DB
+    # Table Constraints
     __table_args__ = (
-        # Check constraints are handled by PostgreSQL
+        CheckConstraint("length(trim(name)) > 0", name="organizations_name_not_empty"),
+        Index('idx_organizations_name', 'name'),
     )
 
     def __repr__(self):

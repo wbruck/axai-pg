@@ -1,22 +1,27 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, CheckConstraint
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, CheckConstraint, Index
+from sqlalchemy.dialects.postgresql import UUID, JSONB, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID
 import uuid
 from ..config.database import Base
 
 class Document(Base):
-    """Core document storage with ownership and metadata."""
+    """
+    Core document storage with ownership and metadata.
+
+    Documents are owned by users and belong to organizations (multi-tenant).
+    They support versioning, summaries, topics, and graph relationships.
+    """
     __tablename__ = 'documents'
 
     # Primary Key
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    
+
     # Core Fields
     title = Column(Text, nullable=False)
     content = Column(Text, nullable=False)
-    owner_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
-    org_id = Column(UUID(as_uuid=True), ForeignKey('organizations.id'), nullable=False)
+    owner_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    org_id = Column(UUID(as_uuid=True), ForeignKey('organizations.id', ondelete='CASCADE'), nullable=False)
     document_type = Column(String(50), nullable=False)
     status = Column(String(20), nullable=False, default='draft')
     version = Column(Integer, nullable=False, default=1)
@@ -29,16 +34,35 @@ class Document(Base):
     source = Column(String(100))
     content_hash = Column(String(64))
     external_ref_id = Column(String(100))
-    document_metadata = Column(JSON, name='metadata')
+    document_metadata = Column(JSONB, name='metadata')
 
     # Relationships
     owner = relationship("User", back_populates="owned_documents")
     organization = relationship("Organization", back_populates="documents")
-    versions = relationship("DocumentVersion", back_populates="document", lazy="dynamic")
-    summaries = relationship("Summary", back_populates="document", lazy="dynamic")
-    topics = relationship("DocumentTopic", back_populates="document", lazy="dynamic")
-    graph_node = relationship("GraphNode", back_populates="document", uselist=False)
-    graph_relationships = relationship("GraphRelationship", back_populates="document", lazy="dynamic")
+    versions = relationship("DocumentVersion", back_populates="document", lazy="dynamic", cascade="all, delete-orphan")
+    summaries = relationship("Summary", back_populates="document", lazy="dynamic", cascade="all, delete-orphan")
+    topics = relationship("DocumentTopic", back_populates="document", lazy="dynamic", cascade="all, delete-orphan")
+    graph_node = relationship("GraphNode", back_populates="document", uselist=False, cascade="all, delete-orphan")
+    graph_relationships = relationship("GraphRelationship", back_populates="document", lazy="dynamic", cascade="all, delete-orphan")
+
+    # Table Constraints
+    __table_args__ = (
+        CheckConstraint("length(trim(title)) > 0", name="documents_title_not_empty"),
+        CheckConstraint(
+            "status IN ('draft', 'published', 'archived', 'deleted')",
+            name="documents_valid_status"
+        ),
+        CheckConstraint("version > 0", name="documents_valid_version"),
+        CheckConstraint(
+            "processing_status IN ('pending', 'processing', 'complete', 'error')",
+            name="documents_valid_processing_status"
+        ),
+        Index('idx_documents_org_id', 'org_id'),
+        Index('idx_documents_owner_id', 'owner_id'),
+        Index('idx_documents_type', 'document_type'),
+        Index('idx_documents_status', 'status'),
+        Index('idx_documents_org_status', 'org_id', 'status'),
+    )
 
     def __repr__(self):
         return f"<Document(id={self.id}, title='{self.title}', version={self.version})>"

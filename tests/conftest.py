@@ -17,9 +17,10 @@ sys.path.insert(0, project_root)
 load_dotenv()
 
 # Test database configuration
+# Matches docker-compose.standalone-test.yml credentials
 TEST_DB_URL = os.getenv(
     "TEST_DATABASE_URL",
-    "postgresql://postgres:postgres@localhost:5432/test_db"
+    "postgresql://test_user:test_password@localhost:5432/test_db"
 )
 
 def pytest_addoption(parser):
@@ -49,16 +50,19 @@ def test_engine(request):
 
 @pytest.fixture(scope="session", autouse=True)
 def init_test_db(test_engine):
-    """Initialize the test database schema."""
+    """Initialize the test database schema using PostgreSQLSchemaBuilder."""
     # Only initialize real database if we're running integration tests
     if test_engine:
-        from src.axai_pg.data.models.base import Base
-        Base.metadata.create_all(test_engine)
-        
+        from src.axai_pg.utils.schema_builder import PostgreSQLSchemaBuilder
+
+        # Build complete schema with all PostgreSQL features
+        # If this fails, the exception will propagate and pytest will show the real error
+        PostgreSQLSchemaBuilder.build_complete_schema(test_engine)
+
         yield
-        
+
         # Clean up
-        Base.metadata.drop_all(test_engine)
+        PostgreSQLSchemaBuilder.drop_complete_schema(test_engine)
     else:
         yield
 
@@ -67,7 +71,7 @@ def db_session(test_engine):
     """Create a new database session for a test with transaction rollback."""
     if not test_engine:
         pytest.skip("Database session only available in integration tests")
-    
+
     connection = test_engine.connect()
     transaction = connection.begin()
     Session = sessionmaker(bind=connection)
@@ -78,6 +82,12 @@ def db_session(test_engine):
     session.close()
     transaction.rollback()
     connection.close()
+
+# Alias for backward compatibility with tests that use real_db_session
+@pytest.fixture(scope="function")
+def real_db_session(db_session):
+    """Alias for db_session for backward compatibility."""
+    return db_session
 
 @pytest.fixture(scope="function")
 def test_data():
