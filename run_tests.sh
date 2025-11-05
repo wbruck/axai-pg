@@ -8,12 +8,12 @@ NC='\033[0m' # No Color
 
 # Start PostgreSQL
 echo -e "\n${GREEN}Starting PostgreSQL container...${NC}"
-docker-compose --env-file .env.test up -d postgres
+docker-compose -f docker-compose.standalone-test.yml up -d postgres
 
 # Wait for PostgreSQL to be ready
 echo -e "\n${YELLOW}Waiting for PostgreSQL to be ready...${NC}"
 for i in {1..30}; do
-    if docker-compose --env-file .env.test exec postgres pg_isready -U test_user -d test_db > /dev/null 2>&1; then
+    if docker-compose -f docker-compose.standalone-test.yml exec postgres pg_isready -U test_user -d test_db > /dev/null 2>&1; then
         echo -e "${GREEN}PostgreSQL is ready!${NC}"
         break
     fi
@@ -21,40 +21,24 @@ for i in {1..30}; do
 done
 
 # Set up trap to ensure cleanup
-trap 'docker-compose --env-file .env.test down' EXIT
+trap 'docker-compose -f docker-compose.standalone-test.yml down' EXIT
 
-# Run unit tests locally
-echo -e "\n${GREEN}Running unit tests...${NC}"
-pipenv run pytest tests/unit/ -v --cov=src --cov-report=term-missing
-UNIT_TEST_STATUS=$?
+# Run all integration tests
+echo -e "\n${GREEN}Running integration tests...${NC}"
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests/integration/ -v --integration
+TEST_STATUS=$?
 
-# Run regular integration tests locally
-echo -e "\n${GREEN}Running regular integration tests...${NC}"
-pipenv run pytest tests/integration/ -v --cov=src --cov-report=term-missing
-REGULAR_INTEGRATION_TEST_STATUS=$?
-
-# Run Docker integration tests
-echo -e "\n${GREEN}Running Docker integration tests...${NC}"
-docker-compose --env-file .env.test up --build test_runner
-DOCKER_INTEGRATION_TEST_STATUS=$?
-
-# Generate coverage report
-echo -e "\n${GREEN}Generating coverage report...${NC}"
-pipenv run coverage html
+# Generate coverage report (optional - only if pytest-cov installed)
+if command -v coverage &> /dev/null; then
+    echo -e "\n${GREEN}Generating coverage report...${NC}"
+    coverage html
+fi
 
 # Check test results
-if [ $UNIT_TEST_STATUS -eq 0 ] && [ $REGULAR_INTEGRATION_TEST_STATUS -eq 0 ] && [ $DOCKER_INTEGRATION_TEST_STATUS -eq 0 ]; then
+if [ $TEST_STATUS -eq 0 ]; then
     echo -e "\n${GREEN}All tests passed!${NC}"
     exit 0
 else
-    if [ $UNIT_TEST_STATUS -ne 0 ]; then
-        echo -e "\n${RED}Unit tests failed.${NC}"
-    fi
-    if [ $REGULAR_INTEGRATION_TEST_STATUS -ne 0 ]; then
-        echo -e "\n${RED}Regular integration tests failed.${NC}"
-    fi
-    if [ $DOCKER_INTEGRATION_TEST_STATUS -ne 0 ]; then
-        echo -e "\n${RED}Docker integration tests failed.${NC}"
-    fi
+    echo -e "\n${RED}Tests failed.${NC}"
     exit 1
-fi 
+fi

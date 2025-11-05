@@ -23,29 +23,23 @@ pipenv install --dev
 ### Testing
 ```bash
 # Start PostgreSQL test container
-docker-compose --env-file .env.test up -d postgres
+docker-compose -f docker-compose.standalone-test.yml up -d postgres
 
-# Run all tests via script (includes unit, integration, and docker tests)
+# Run all tests via script (recommended)
 ./run_tests.sh
 
-# Run specific test types
-pytest tests/unit/ -v                    # Unit tests only
-pytest tests/integration/ -v             # Integration tests only
-pytest tests/docker_integration/ -v      # Docker integration tests
+# Run tests manually
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests/integration/ -v --integration
 
-# Run with markers
-pytest -m unit                           # Tests marked as unit
-pytest -m integration                    # Tests marked as integration
-pytest -m db                             # Database-specific tests
+# Run specific test file
+pytest tests/integration/test_schema_creation.py -v --integration
+pytest tests/integration/test_crud_operations.py -v --integration
 
-# Run single test file
-pytest tests/unit/test_models.py -v
-
-# Run with coverage
-pytest --cov=src --cov-report=html --cov-report=term-missing
+# Run with coverage (if pytest-cov is installed)
+pytest tests/integration/ -v --integration --cov=src --cov-report=html --cov-report=term-missing
 
 # Clean up test containers
-docker-compose --env-file .env.test down
+docker-compose -f docker-compose.standalone-test.yml down -v
 ```
 
 ### Database Management
@@ -164,15 +158,38 @@ All migrations must be:
 
 ### Testing Strategy
 
-Three-tier testing approach:
-1. **Unit tests** (`tests/unit/`): Isolated component testing
-2. **Integration tests** (`tests/integration/`): Tests with real PostgreSQL database
-3. **Docker integration tests** (`tests/docker_integration/`): Full containerized environment tests
+**SQLAlchemy-First Integration Testing:**
 
-Test configuration in `conftest.py` provides:
-- Database session fixtures with automatic transaction rollback
-- Sample data fixtures
-- Test database setup/teardown
+All tests use a real PostgreSQL database with no mocks. The schema is created programmatically from SQLAlchemy models using `PostgreSQLSchemaBuilder`, which:
+1. Creates PostgreSQL extensions (uuid-ossp)
+2. Creates custom trigger functions (auto-update timestamps)
+3. Creates tables from SQLAlchemy models
+4. Creates triggers for each table
+5. Adds table comments
+6. Creates performance indexes
+
+**Test Structure:**
+- **`tests/integration/`**: All tests (40 tests total: 39 passing, 1 skipped)
+  - `test_schema_creation.py`: Schema validation (16 tests)
+  - `test_schema_builder.py`: PostgreSQLSchemaBuilder functionality (10 tests)
+  - `test_database_initializer.py`: Database lifecycle management (8 tests)
+  - `test_crud_operations.py`: CRUD operations (6 tests)
+- **`tests/conftest.py`**: Test fixtures and database setup
+
+**Test Fixtures:**
+- `test_engine`: Session-scoped SQLAlchemy engine
+- `db_session`: Function-scoped session with automatic transaction rollback
+- `real_db_session`: Alias for `db_session` (backward compatibility)
+
+**Why Real Database Testing:**
+- Validates actual PostgreSQL behavior (triggers, constraints, indexes)
+- Catches schema compatibility issues
+- Verifies query performance
+- Tests transaction rollback behavior
+- No mock maintenance burden
+
+**Transaction Isolation:**
+Each test runs in a transaction that is rolled back after completion, ensuring tests don't affect each other and run quickly.
 
 ### TypeScript Legacy
 
@@ -191,12 +208,18 @@ Access to models goes through repository layer to enable:
 - Transaction management
 - Query optimization
 
-### 3. Real Database Testing
-Integration tests use real PostgreSQL (not mocks) to ensure:
-- Schema compatibility
-- Constraint validation
+### 3. SQLAlchemy-First Schema with Real Database Testing
+Models are the single source of truth for schema definition. The `PostgreSQLSchemaBuilder` creates the schema programmatically from SQLAlchemy models, including PostgreSQL-specific features (extensions, triggers, check constraints, indexes, comments).
+
+All tests use real PostgreSQL (not mocks) to ensure:
+- Schema compatibility with PostgreSQL-specific features
+- Constraint validation (check constraints, foreign keys, unique constraints)
+- Trigger functionality (auto-update timestamps)
 - Query performance accuracy
 - Transaction behavior correctness
+- Extension functionality (uuid-ossp)
+
+The old SQL files in `sql/schema/` are deprecated and kept only for reference. Schema creation is done exclusively through SQLAlchemy models.
 
 ### 4. UUID Primary Keys
 All entities use UUIDs instead of auto-incrementing integers for:
@@ -245,6 +268,66 @@ with db.session_scope() as session:
 ```
 
 Never commit or rollback manually unless you have a specific reason.
+
+## SQLAlchemy-First Schema Management
+
+### Overview
+
+The project uses **SQLAlchemy models as the single source of truth** for database schema. Schema is created programmatically, not from SQL files.
+
+### PostgreSQLSchemaBuilder
+
+Located in `src/axai_pg/utils/schema_builder.py`, this class creates the complete PostgreSQL schema from SQLAlchemy models:
+
+```python
+from src.axai_pg.utils.schema_builder import PostgreSQLSchemaBuilder
+from sqlalchemy import create_engine
+
+engine = create_engine("postgresql://user:pass@localhost/db")
+
+# Create complete schema
+PostgreSQLSchemaBuilder.build_complete_schema(engine)
+
+# Drop complete schema
+PostgreSQLSchemaBuilder.drop_complete_schema(engine)
+```
+
+### Schema Creation Steps
+
+1. **Extensions**: Creates PostgreSQL extensions (uuid-ossp)
+2. **Trigger Functions**: Creates custom trigger functions (update_modified_column)
+3. **Tables**: Creates all tables from `Base.metadata.create_all()`
+4. **Triggers**: Applies triggers to tables (auto-update timestamps)
+5. **Comments**: Adds table and column comments
+6. **Indexes**: Creates performance indexes
+
+### Schema Features
+
+All tables include:
+- UUID primary keys (using uuid-ossp extension)
+- Timestamps (created_at, updated_at with automatic trigger updates)
+- Foreign key constraints with CASCADE deletes
+- Check constraints (email format, status values, etc.)
+- Performance indexes on foreign keys and query patterns
+- JSONB columns for flexible metadata
+- Table comments for documentation
+
+### Migration from SQL Files
+
+The SQL files in `sql/schema/` are **deprecated** and kept only for reference. All schema management is done through SQLAlchemy models and PostgreSQLSchemaBuilder.
+
+**Do not modify SQL files.** Instead:
+1. Update SQLAlchemy models in `src/axai_pg/data/models/`
+2. Schema is automatically updated via PostgreSQLSchemaBuilder
+3. Test changes with integration tests
+
+### Testing Schema Changes
+
+When modifying models:
+1. Update the model class
+2. Run integration tests to verify schema: `pytest tests/integration/test_schema_creation.py -v --integration`
+3. PostgreSQLSchemaBuilder will create schema from updated models
+4. Tests validate all PostgreSQL features work correctly
 
 ## Performance Considerations
 

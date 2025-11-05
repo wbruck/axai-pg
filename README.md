@@ -272,8 +272,16 @@ The old SQL files in `sql/schema/` are deprecated and kept only for reference.
 
 ### Test Organization
 
-- **`tests/integration/`**: All tests use real PostgreSQL (no mocks)
-  - `test_schema_creation.py`: Comprehensive schema validation tests
+All tests are integration tests using real PostgreSQL:
+
+- **`tests/integration/test_schema_creation.py`**: Comprehensive schema validation (16 tests)
+  - Tables, extensions, triggers, constraints, indexes, foreign keys, JSONB columns
+- **`tests/integration/test_schema_builder.py`**: PostgreSQLSchemaBuilder testing (10 tests)
+  - Build schema, idempotency, individual component testing
+- **`tests/integration/test_database_initializer.py`**: Database lifecycle (8 tests)
+  - Setup, teardown, context managers, DatabaseManager integration
+- **`tests/integration/test_crud_operations.py`**: CRUD operations (6 tests)
+  - Create, read, update operations for all models
 - **`tests/conftest.py`**: Test fixtures and database setup
 
 ### Test Fixtures
@@ -289,21 +297,20 @@ The old SQL files in `sql/schema/` are deprecated and kept only for reference.
 @pytest.mark.integration
 def test_something(db_session):
     # Create test data
-    user = User(username="testuser", email="test@example.com")
+    org = Organization(name="Test Org")
+    db_session.add(org)
+    db_session.flush()
+
+    user = User(username="testuser", email="test@example.com", org_id=org.id)
     db_session.add(user)
     db_session.commit()
-    
+
     # Query the database
     result = db_session.query(User).filter_by(username="testuser").first()
     assert result is not None
     assert result.email == "test@example.com"
+    assert result.org_id == org.id
 ```
-
-### Test Organization
-
-- `tests/integration/`: Integration tests with real database
-- `tests/docker_integration/`: Docker-based tests
-- `tests/conftest.py`: Test configuration and fixtures
 
 ### Database Reset
 
