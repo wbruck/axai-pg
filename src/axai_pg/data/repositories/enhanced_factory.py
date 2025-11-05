@@ -2,6 +2,7 @@
 
 from typing import Dict, Type, TypeVar, Optional, Any
 import threading
+from datetime import datetime
 from contextlib import contextmanager
 from .repository_metrics import RepositoryMetrics
 from .metrics_config import RepositoryMetricsConfig, MetricsProfile

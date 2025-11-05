@@ -5,17 +5,20 @@ import threading
 import time
 from datetime import datetime, timedelta
 from typing import List
-from ..data.repositories.enhanced_factory import RepositoryFactory
-from ..data.repositories.metrics_config import RepositoryMetricsConfig, MetricsProfile
-from ..data.models.document import Document
-from ..data.repositories.document_repository import DocumentRepository
+from axai_pg.data.repositories.enhanced_factory import RepositoryFactory
+from axai_pg.data.repositories.metrics_config import RepositoryMetricsConfig, MetricsProfile
+from axai_pg.data.models.document import Document
+from axai_pg.data.repositories.document_repository import DocumentRepository
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def factory():
-    """Get a clean instance of the repository factory."""
+    """Get a clean instance of the repository factory before each test."""
     # Reset the singleton between tests
     RepositoryFactory._instance = None
-    return RepositoryFactory.get_instance()
+    factory = RepositoryFactory.get_instance()
+    # Reset all metrics to ensure clean state
+    factory.reset_metrics()
+    return factory
 
 def test_singleton_pattern():
     """Test that factory properly implements singleton pattern."""

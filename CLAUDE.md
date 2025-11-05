@@ -15,9 +15,6 @@ pip install -e .
 
 # Install with all development dependencies
 pip install -e ".[dev]"
-
-# Using pipenv (if Pipfile exists)
-pipenv install --dev
 ```
 
 ### Testing
@@ -43,15 +40,20 @@ docker-compose -f docker-compose.standalone-test.yml down -v
 ```
 
 ### Database Management
-```bash
-# Reset database (drops, recreates, applies schema)
-./reset_db.sh
+Schema is created programmatically using `PostgreSQLSchemaBuilder`. See "SQLAlchemy-First Schema Management" section below for details.
 
-# Apply schema manually
-docker exec axai-pg-test psql -U test_user -d test_db -f /docker-entrypoint-initdb.d/schema.sql
+```python
+# Programmatically create/reset database
+from axai_pg.utils import DatabaseInitializer, DatabaseInitializerConfig
+from axai_pg.data.config.database import PostgresConnectionConfig
 
-# Add sample data
-python add_sample_data.py
+config = DatabaseInitializerConfig(
+    connection_config=PostgresConnectionConfig.from_env(),
+    auto_create_db=True
+)
+
+db_init = DatabaseInitializer(config)
+db_init.setup_database()  # Creates schema using SQLAlchemy models
 ```
 
 ### Code Quality
@@ -74,8 +76,8 @@ pre-commit install
 
 ### Development
 ```bash
-# Start development environment with sample data
-docker-compose --profile dev up -d
+# Start PostgreSQL database for local development
+docker-compose up -d
 
 # Build package
 python -m build
@@ -353,12 +355,8 @@ When modifying models:
 ## Docker Environment
 
 ### Container Names
-- `axai-pg-test`: PostgreSQL test database
-- `axai-pg-test-runner`: Test execution container
-- `axai-pg-dev`: Development environment with sample data
-
-### Network Configuration
-Uses external `shared-network` for inter-container communication.
+- `axai-pg-test`: PostgreSQL test database (from docker-compose.yml)
+- `axai-pg-standalone-test`: Standalone PostgreSQL for integration tests (from docker-compose.standalone-test.yml)
 
 ### Environment Variables
 Configure via `.env` or `.env.test`:
@@ -404,7 +402,7 @@ Configure via `.env` or `.env.test`:
 Call `DatabaseManager.initialize(conn_config)` before using repositories or models.
 
 ### Test database not available
-Ensure PostgreSQL container is running: `docker-compose --env-file .env.test up -d postgres`
+Ensure PostgreSQL container is running: `docker-compose -f docker-compose.standalone-test.yml up -d` or `./run_tests.sh`
 
 ### Migration conflicts
 Use sequential versioning with date prefix to avoid conflicts. If conflict occurs, rebase migrations with new version numbers.
