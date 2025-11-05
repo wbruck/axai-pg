@@ -4,9 +4,31 @@ This package provides PostgreSQL models and database management for AXAI applica
 
 ## Installation
 
+### For Production Use
+
 ```bash
 pip install axai-pg
 ```
+
+### For Development
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd axai-pg
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Or install in editable mode with testing extras
+pip install -e ".[testing]"
+```
+
+### Prerequisites
+
+- Python >=3.8
+- PostgreSQL 12 or later
+- Docker and Docker Compose (for running tests)
 
 ## Usage
 
@@ -188,50 +210,86 @@ pip install -e .
 
 ## Testing
 
-The project uses pytest for testing with a focus on integration tests that use a real PostgreSQL database. This approach ensures that tests closely mirror production behavior.
+All tests use a real PostgreSQL database for accuracy and reliability. The database schema is created programmatically using SQLAlchemy models with PostgreSQL-specific features (triggers, check constraints, indexes, etc.).
 
-### Running Tests
+### Quick Start
 
-1. Start the test database:
+1. **Install dependencies**:
 ```bash
-docker-compose -f docker-compose.test.yml up -d
+pip install -r requirements.txt
 ```
 
-2. Run the tests:
+2. **Start the test database**:
 ```bash
-# Run all tests
-pytest --integration
-
-# Run specific test types
-pytest tests/integration/    # Integration tests only
-pytest tests/docker_integration/  # Docker tests only
-
-# Run with coverage
-pytest --cov=axai_pg tests/ --integration
+docker-compose -f docker-compose.standalone-test.yml up -d
 ```
 
-3. Clean up:
+3. **Run the tests**:
 ```bash
-docker-compose -f docker-compose.test.yml down
+# Run all integration tests
+pytest tests/integration/ -v --integration
+
+# Run specific test file
+pytest tests/integration/test_schema_creation.py -v --integration
+
+# Run with coverage (if pytest-cov is installed)
+pytest tests/ -v --integration --cov=src --cov-report=term-missing
 ```
 
-### Test Configuration
+4. **Clean up**:
+```bash
+docker-compose -f docker-compose.standalone-test.yml down -v
+```
 
-The test suite uses `conftest.py` to provide fixtures and configuration:
+### Test Database Configuration
 
-- `db_session`: Database session with automatic transaction rollback
-- `test_data`: Sample data for testing
+The test database uses the following credentials (from `docker-compose.standalone-test.yml`):
+- **Host**: localhost
+- **Port**: 5432
+- **Database**: test_db
+- **Username**: test_user
+- **Password**: test_password
 
-### Database Setup
+These match the defaults in `tests/conftest.py`. You can override by setting the `TEST_DATABASE_URL` environment variable:
 
-The test database is configured using Docker Compose with the following settings:
-- Host: localhost
-- Port: 5432
-- Database: test_db
-- Username: postgres
-- Password: postgres
+```bash
+export TEST_DATABASE_URL="postgresql://user:password@localhost:5432/my_test_db"
+pytest tests/integration/ -v --integration
+```
 
-You can override these settings by setting the `TEST_DATABASE_URL` environment variable.
+### SQLAlchemy-First Schema Approach
+
+The project uses **SQLAlchemy models as the single source of truth** for schema definition. The schema is created programmatically via `PostgreSQLSchemaBuilder`, which:
+
+1. Creates PostgreSQL extensions (uuid-ossp)
+2. Creates custom trigger functions (auto-update timestamps)
+3. Creates tables from SQLAlchemy models (`Base.metadata.create_all`)
+4. Creates triggers for each table
+5. Adds table comments
+6. Creates performance indexes
+
+The old SQL files in `sql/schema/` are deprecated and kept only for reference.
+
+### Test Organization
+
+All tests are integration tests using real PostgreSQL:
+
+- **`tests/integration/test_schema_creation.py`**: Comprehensive schema validation (16 tests)
+  - Tables, extensions, triggers, constraints, indexes, foreign keys, JSONB columns
+- **`tests/integration/test_schema_builder.py`**: PostgreSQLSchemaBuilder testing (10 tests)
+  - Build schema, idempotency, individual component testing
+- **`tests/integration/test_database_initializer.py`**: Database lifecycle (8 tests)
+  - Setup, teardown, context managers, DatabaseManager integration
+- **`tests/integration/test_crud_operations.py`**: CRUD operations (6 tests)
+  - Create, read, update operations for all models
+- **`tests/conftest.py`**: Test fixtures and database setup
+
+### Test Fixtures
+
+- **`test_engine`**: Session-scoped SQLAlchemy engine
+- **`db_session`**: Function-scoped session with automatic transaction rollback
+- **`real_db_session`**: Alias for `db_session` (backward compatibility)
+- **`test_data`**: Sample data fixtures
 
 ### Writing Tests
 
@@ -239,21 +297,20 @@ You can override these settings by setting the `TEST_DATABASE_URL` environment v
 @pytest.mark.integration
 def test_something(db_session):
     # Create test data
-    user = User(username="testuser", email="test@example.com")
+    org = Organization(name="Test Org")
+    db_session.add(org)
+    db_session.flush()
+
+    user = User(username="testuser", email="test@example.com", org_id=org.id)
     db_session.add(user)
     db_session.commit()
-    
+
     # Query the database
     result = db_session.query(User).filter_by(username="testuser").first()
     assert result is not None
     assert result.email == "test@example.com"
+    assert result.org_id == org.id
 ```
-
-### Test Organization
-
-- `tests/integration/`: Integration tests with real database
-- `tests/docker_integration/`: Docker-based tests
-- `tests/conftest.py`: Test configuration and fixtures
 
 ### Database Reset
 
@@ -277,6 +334,182 @@ Note: The script requires that the Docker container `axai-pg-test` is running. I
 
 ```bash
 docker-compose -f docker-compose.test.yml up -d
+```
+
+## Integration Testing with Other Systems
+
+The axai-pg package provides utilities to simplify integration testing for external systems that use this package.
+
+### Quick Start for External Systems
+
+1. **Install with testing extras**:
+```bash
+pip install axai-pg[testing]
+```
+
+2. **Start the test database**:
+```bash
+docker-compose -f docker-compose.standalone-test.yml up -d
+```
+
+3. **Use pytest fixtures in your tests**:
+```python
+from axai_pg.testing.fixtures import axai_db_session
+from axai_pg.data.models import Organization, User
+
+def test_my_feature(axai_db_session):
+    # Create test data
+    org = Organization(name="Test Org")
+    axai_db_session.add(org)
+    axai_db_session.commit()
+
+    # Run your tests
+    assert axai_db_session.query(Organization).count() == 1
+    # Session automatically rolls back after test
+```
+
+### Programmatic Database Initialization
+
+For non-pytest scenarios or custom test setups:
+
+```python
+from axai_pg.utils import DatabaseInitializer, DatabaseInitializerConfig
+from axai_pg.data.config.database import PostgresConnectionConfig
+
+# Configure database
+conn_config = PostgresConnectionConfig(
+    host='localhost',
+    port=5432,
+    database='test_db',
+    username='test_user',
+    password='test_password'
+)
+
+config = DatabaseInitializerConfig(
+    connection_config=conn_config,
+    auto_create_db=True,
+    auto_drop_on_exit=True  # Automatic cleanup
+)
+
+# Use context manager for automatic setup/teardown
+with DatabaseInitializer(config) as db_init:
+    db_init.setup_database()
+
+    # Run your tests
+    with db_init.session_scope() as session:
+        # Perform database operations
+        pass
+
+# Database is automatically cleaned up
+```
+
+### Available Pytest Fixtures
+
+- **`axai_db_config`**: Connection configuration
+- **`axai_test_db`**: Session-scoped database initialization
+- **`axai_db_session`**: Function-scoped session with automatic rollback
+- **`axai_db_manager`**: Direct access to DatabaseManager
+- **`axai_clean_db_session`**: Session without rollback (commits changes)
+- **`axai_reset_db`**: Reset database to clean state
+
+### Environment Variables
+
+Configure the test database using environment variables:
+
+```bash
+export POSTGRES_HOST=localhost
+export POSTGRES_PORT=5432
+export POSTGRES_DB=test_db
+export POSTGRES_USER=test_user
+export POSTGRES_PASSWORD=test_password
+
+# Optional: Auto-drop database after tests
+export AXAI_AUTO_DROP_DB=true
+
+# Optional: Load sample data
+export AXAI_LOAD_SAMPLE_DATA=true
+```
+
+### Docker Compose for CI/CD
+
+The `docker-compose.standalone-test.yml` file provides a minimal PostgreSQL setup perfect for CI/CD pipelines:
+
+```yaml
+# In your CI configuration
+services:
+  test:
+    image: python:3.12
+    depends_on:
+      - postgres
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: test_db
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+    command: pytest tests/
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: test_db
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+```
+
+### Examples
+
+See the `examples/` directory for comprehensive usage examples:
+- `integration_test_example.py` - Multiple integration testing patterns
+- `production_init_example.py` - Production database initialization
+
+For more details, see the [Database Initializer documentation](#database-initialization).
+
+## Database Initialization
+
+The `DatabaseInitializer` utility can be used for both testing and production scenarios.
+
+### Features
+
+- **Database lifecycle management**: Create, setup, teardown databases
+- **Schema management**: Apply SQL schema files
+- **Sample data loading**: Load test data from scripts
+- **Health checks**: Verify database connectivity
+- **Context manager support**: Automatic cleanup
+- **Production-ready**: Environment-specific configurations
+
+### Use Cases
+
+1. **Integration Testing**: Setup/teardown test databases
+2. **Development**: Initialize development databases with sample data
+3. **Production Deployment**: Initial database setup
+4. **Blue-Green Deployments**: Prepare new database instances
+5. **Health Checks**: Kubernetes readiness/liveness probes
+
+### Basic Usage
+
+```python
+from axai_pg.utils import DatabaseInitializer, DatabaseInitializerConfig
+from axai_pg.data.config.database import PostgresConnectionConfig
+
+# Configure
+config = DatabaseInitializerConfig(
+    connection_config=PostgresConnectionConfig.from_env(),
+    auto_create_db=True,
+    auto_drop_on_exit=False  # Set True for tests
+)
+
+# Initialize
+db_init = DatabaseInitializer(config)
+db_init.setup_database(load_sample_data=False)
+
+# Use database
+db_manager = db_init.get_database_manager()
+with db_manager.session_scope() as session:
+    # Perform operations
+    pass
+
+# Cleanup when done
+db_init.teardown_database()
 ```
 
 ## Contributing

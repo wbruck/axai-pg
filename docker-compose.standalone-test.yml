@@ -1,0 +1,65 @@
+version: '3.8'
+
+# Standalone PostgreSQL test database for integration testing
+# This docker-compose file provides a minimal PostgreSQL setup that can be used
+# by external systems for integration testing with axai_pg.
+#
+# Usage:
+#   # Start the database
+#   docker-compose -f docker-compose.standalone-test.yml up -d
+#
+#   # Check database is ready
+#   docker-compose -f docker-compose.standalone-test.yml ps
+#
+#   # Stop and remove
+#   docker-compose -f docker-compose.standalone-test.yml down
+#
+#   # Stop and remove with volumes (complete cleanup)
+#   docker-compose -f docker-compose.standalone-test.yml down -v
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: axai-pg-standalone-test
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-test_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-test_password}
+      - POSTGRES_DB=${POSTGRES_DB:-test_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # Ephemeral storage - data is lost when container is removed
+      - postgres_test_data:/var/lib/postgresql/data
+      # Optional: mount initialization scripts
+      # Uncomment if you want to run custom SQL on startup
+      # - ./init-scripts:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-test_user} -d ${POSTGRES_DB:-test_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    # Resource limits (adjust as needed)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+volumes:
+  postgres_test_data:
+    # Use tmpfs for faster test execution (data in memory)
+    # Remove this section if you need data persistence across container restarts
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+
+# Optional: Add a network if you need to connect multiple services
+# networks:
+#   test-network:
+#     driver: bridge
