@@ -56,7 +56,7 @@ class DocumentTopic(Base):
     extracted_by_tool = Column(String(100), nullable=False)
 
     # Relationships
-    document = relationship("Document", back_populates="topics")
+    document = relationship("Document", back_populates="topics_rel")
     topic = relationship("Topic", back_populates="documents")
 
     # Table Constraints

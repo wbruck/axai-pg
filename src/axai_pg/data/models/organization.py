@@ -25,6 +25,7 @@ class Organization(Base):
     # Relationships
     users = relationship("User", back_populates="organization", lazy="dynamic", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="organization", lazy="dynamic", cascade="all, delete-orphan")
+    collections = relationship("Collection", back_populates="organization", lazy="dynamic", cascade="all, delete-orphan")
 
     # Table Constraints
     __table_args__ = (

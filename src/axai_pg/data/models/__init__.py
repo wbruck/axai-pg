@@ -9,10 +9,29 @@ from .organization import Organization
 from .user import User
 from .document import Document, DocumentVersion
 from .summary import Summary
-from .graph import GraphNode, GraphRelationship
+from .graph import GraphEntity, GraphRelationship, SourceType
 from .topic import Topic, DocumentTopic
 from .base import BaseModel
-from .security import SecurityPolicy
+from .security import (
+    Role,
+    UserRole,
+    RolePermission,
+    AuditLog,
+    RateLimit,
+    SecurityPolicy
+)
+from .collection import (
+    Collection,
+    CollectionEntity,
+    CollectionRelationship,
+    EntityLink,
+    EntityOperation,
+    DocumentCollectionContext,
+    VisibilityProfile,
+    OperationType
+)
+from .token import Token
+from .feedback import Feedback
 
 __all__ = [
     'Base',
@@ -20,8 +39,27 @@ __all__ = [
     'User',
     'Organization',
     'Document',
+    'DocumentVersion',
     'Summary',
     'Topic',
+    'DocumentTopic',
+    'GraphEntity',
     'GraphRelationship',
-    'SecurityPolicy'
+    'SourceType',
+    'Role',
+    'UserRole',
+    'RolePermission',
+    'AuditLog',
+    'RateLimit',
+    'SecurityPolicy',
+    'Collection',
+    'CollectionEntity',
+    'CollectionRelationship',
+    'EntityLink',
+    'EntityOperation',
+    'OperationType',
+    'DocumentCollectionContext',
+    'VisibilityProfile',
+    'Token',
+    'Feedback',
 ]

@@ -8,7 +8,7 @@ with all PostgreSQL-specific features (extensions, triggers, constraints, indexe
 import pytest
 from sqlalchemy import text, inspect
 from src.axai_pg.data.models import Organization, User, Document, DocumentVersion, Summary, Topic, DocumentTopic
-from src.axai_pg.data.models.graph import GraphNode, GraphRelationship
+from src.axai_pg.data.models.graph import GraphEntity, GraphRelationship
 
 
 @pytest.mark.integration
@@ -29,7 +29,7 @@ class TestSchemaCreation:
             'summaries',
             'topics',
             'document_topics',
-            'graph_nodes',
+            'graph_entities',
             'graph_relationships',
         ]
 
@@ -166,13 +166,18 @@ class TestSchemaCreation:
         db_session.flush()
 
         # Invalid status should fail
+        content = "Content"
         doc = Document(
             title="Test",
-            content="Content",
+            content=content,
             owner_id=user.id,
             org_id=org.id,
             document_type="text",
-            status="invalid_status"  # Not in allowed values
+            status="invalid_status",  # Not in allowed values
+            filename="test.txt",
+            file_path="/test/path/test.txt",
+            size=len(content),
+            content_type="text/plain"
         )
         db_session.add(doc)
 
@@ -193,14 +198,19 @@ class TestSchemaCreation:
         db_session.flush()
 
         # Version <= 0 should fail
+        content = "Content"
         doc = Document(
             title="Test",
-            content="Content",
+            content=content,
             owner_id=user.id,
             org_id=org.id,
             document_type="text",
             status="draft",
-            version=0  # Should be > 0
+            version=0,  # Should be > 0
+            filename="test.txt",
+            file_path="/test/path/test.txt",
+            size=len(content),
+            content_type="text/plain"
         )
         db_session.add(doc)
 
@@ -252,13 +262,18 @@ class TestSchemaCreation:
         db_session.add(user)
         db_session.flush()
 
+        content = "Content"
         doc = Document(
             title="Test Doc",
-            content="Content",
+            content=content,
             owner_id=user.id,
             org_id=org.id,
             document_type="text",
-            status="draft"
+            status="draft",
+            filename="test_doc.txt",
+            file_path="/test/path/test_doc.txt",
+            size=len(content),
+            content_type="text/plain"
         )
         db_session.add(doc)
         db_session.commit()
@@ -305,14 +320,19 @@ class TestSchemaCreation:
         db_session.flush()
 
         # Create document with JSONB metadata
+        content = "Content"
         doc = Document(
             title="Test Doc",
-            content="Content",
+            content=content,
             owner_id=user.id,
             org_id=org.id,
             document_type="text",
             status="draft",
-            document_metadata={"key": "value", "nested": {"data": 123}}
+            document_metadata={"key": "value", "nested": {"data": 123}},
+            filename="test_doc.txt",
+            file_path="/test/path/test_doc.txt",
+            size=len(content),
+            content_type="text/plain"
         )
         db_session.add(doc)
         db_session.commit()

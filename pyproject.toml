@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "axai-pg"
-version = "0.2.0"
+version = "0.3.0"
 description = "PostgreSQL models and database management for AXAI applications"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = "MIT"
 authors = [
     { name = "AXAI" }

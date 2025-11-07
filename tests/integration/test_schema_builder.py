@@ -226,7 +226,7 @@ class TestPostgreSQLSchemaBuilder:
 
         expected_tables = [
             'organizations', 'users', 'documents', 'document_versions',
-            'summaries', 'topics', 'document_topics', 'graph_nodes',
+            'summaries', 'topics', 'document_topics', 'graph_entities',
             'graph_relationships'
         ]
 

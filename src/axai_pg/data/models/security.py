@@ -1,26 +1,68 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, UniqueConstraint, CheckConstraint, JSON
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, UniqueConstraint, CheckConstraint, JSON, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 import uuid
 from ..config.database import Base
 
+class Role(Base):
+    """
+    Role definitions with normalized role management.
+
+    From market-ui integration - defines available roles in the system
+    with descriptions and optional legacy permissions field.
+    """
+    __tablename__ = 'roles'
+
+    # Primary Key
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    # Core Fields
+    name = Column(Text, nullable=False, unique=True)
+    description = Column(Text)
+    permissions = Column(Text)  # Legacy comma-separated permissions
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    user_roles = relationship("UserRole", back_populates="role", lazy="dynamic")
+
+    # Table Constraints
+    __table_args__ = (
+        CheckConstraint("length(trim(name)) > 0", name="roles_name_not_empty"),
+        Index('idx_roles_name', 'name'),
+    )
+
+    def __repr__(self):
+        return f"<Role(id={self.id}, name='{self.name}')>"
+
 class UserRole(Base):
-    """Model for user role assignments."""
+    """
+    Model for user role assignments.
+
+    Updated to reference Role table via role_id for normalized role management.
+    Maintains backward compatibility with role_name field.
+    """
     __tablename__ = 'user_roles'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
-    role_name = Column(Text, nullable=False)
+    role_id = Column(UUID(as_uuid=True), ForeignKey('roles.id', ondelete='CASCADE'), nullable=False)
+    role_name = Column(Text, nullable=False)  # Legacy field for backward compatibility
     assigned_at = Column(DateTime(timezone=True), server_default=func.now())
     assigned_by = Column(UUID(as_uuid=True), ForeignKey('users.id'))
-    
+
     # Relationships
     user = relationship("User", foreign_keys=[user_id])
     assigner = relationship("User", foreign_keys=[assigned_by])
-    
+    role = relationship("Role", back_populates="user_roles")
+
     __table_args__ = (
-        UniqueConstraint('user_id', 'role_name', name='uq_user_role'),
+        UniqueConstraint('user_id', 'role_id', name='uq_user_role'),
+        Index('idx_user_roles_user_id', 'user_id'),
+        Index('idx_user_roles_role_id', 'role_id'),
     )
 
 class RolePermission(Base):
@@ -46,17 +88,40 @@ class RolePermission(Base):
                         name='uq_role_permission'),
     )
 
-class AccessLog(Base):
-    """Model for access audit logging."""
-    __tablename__ = 'access_log'
+class AuditLog(Base):
+    """
+    Unified audit logging (merged from AccessLog).
+
+    Renamed fields for clarity and consistency with market-ui:
+    - action_type → action
+    - table_affected → resource_type
+    - record_id → resource_id
+    - details: Text → JSON for structured data
+    Added user_id FK in addition to username for better referential integrity.
+    """
+    __tablename__ = 'audit_logs'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
     username = Column(Text, nullable=False)
-    action_type = Column(Text, nullable=False)
+    action = Column(Text, nullable=False)
     action_time = Column(DateTime(timezone=True), server_default=func.now())
-    table_affected = Column(Text, nullable=False)
-    record_id = Column(UUID(as_uuid=True))  # Can reference records from different tables
-    details = Column(Text)
+    resource_type = Column(Text, nullable=False)
+    resource_id = Column(UUID(as_uuid=True))  # Can reference records from different tables
+    details = Column(JSON)  # Changed from Text to JSON for structured logging
+
+    # Relationships
+    user = relationship("User")
+
+    # Table Constraints
+    __table_args__ = (
+        Index('idx_audit_logs_user_id', 'user_id'),
+        Index('idx_audit_logs_action_time', 'action_time'),
+        Index('idx_audit_logs_resource_type', 'resource_type'),
+    )
+
+    def __repr__(self):
+        return f"<AuditLog(id={self.id}, username='{self.username}', action='{self.action}')>"
 
 class RateLimit(Base):
     """Model for rate limiting."""

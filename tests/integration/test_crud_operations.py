@@ -61,13 +61,18 @@ class TestCRUDOperations:
         db_session.flush()
 
         # Create document
+        content = "This is a test document content"
         document = Document(
             title="Test Document",
-            content="This is a test document content",
+            content=content,
             owner_id=user.id,
             org_id=org.id,
             document_type="text",
-            status="draft"
+            status="draft",
+            filename="test_document.txt",
+            file_path="/test/path/test_document.txt",
+            size=len(content),
+            content_type="text/plain"
         )
         db_session.add(document)
         db_session.flush()
@@ -111,13 +116,18 @@ class TestCRUDOperations:
         db_session.add(user)
         db_session.flush()
 
+        content = "This is a test document content"
         document = Document(
             title="Test Document",
-            content="This is a test document content",
+            content=content,
             owner_id=user.id,
             org_id=org.id,
             document_type="text",
-            status="draft"
+            status="draft",
+            filename="test_document.txt",
+            file_path="/test/path/test_document.txt",
+            size=len(content),
+            content_type="text/plain"
         )
         db_session.add(document)
         db_session.flush()
@@ -171,13 +181,18 @@ class TestCRUDOperations:
         db_session.add(user)
         db_session.flush()
 
+        content = "This is a test document content"
         document = Document(
             title="Test Document",
-            content="This is a test document content",
+            content=content,
             owner_id=user.id,
             org_id=org.id,
             document_type="text",
-            status="draft"
+            status="draft",
+            filename="test_document.txt",
+            file_path="/test/path/test_document.txt",
+            size=len(content),
+            content_type="text/plain"
         )
         db_session.add(document)
         db_session.flush()
@@ -249,13 +264,18 @@ class TestCRUDOperations:
         db_session.add(user)
         db_session.flush()
 
+        original_content = "Original content"
         document = Document(
             title="Original Title",
-            content="Original content",
+            content=original_content,
             owner_id=user.id,
             org_id=org.id,
             document_type="text",
-            status="draft"
+            status="draft",
+            filename="original.txt",
+            file_path="/test/path/original.txt",
+            size=len(original_content),
+            content_type="text/plain"
         )
         db_session.add(document)
         db_session.flush()

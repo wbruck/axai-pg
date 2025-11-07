@@ -10,7 +10,7 @@ from .data.models import (
     DocumentVersion,
     Summary,
     Topic,
-    GraphNode,
+    GraphEntity,
     GraphRelationship,
     DocumentTopic
 )
