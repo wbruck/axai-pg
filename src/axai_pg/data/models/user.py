@@ -50,6 +50,16 @@ class User(Base):
     tokens = relationship("Token", back_populates="user", lazy="dynamic", cascade="all, delete-orphan")
     feedback_submissions = relationship("Feedback", back_populates="user", lazy="dynamic")
 
+    # Role relationship (from market-ui) - read-only through UserRole table
+    roles = relationship(
+        "Role",
+        secondary="user_roles",
+        primaryjoin="User.id == UserRole.user_id",
+        secondaryjoin="UserRole.role_id == Role.id",
+        viewonly=True,  # Read-only since we use UserRole directly for writes
+        lazy="select"
+    )
+
     # Table Constraints
     __table_args__ = (
         CheckConstraint("length(trim(username)) > 0", name="users_username_not_empty"),

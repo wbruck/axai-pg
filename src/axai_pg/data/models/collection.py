@@ -35,6 +35,13 @@ class Collection(Base):
     owner_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     org_id = Column(UUID(as_uuid=True), ForeignKey('organizations.id', ondelete='CASCADE'), nullable=True)
 
+    # Hierarchy (from market-ui)
+    parent_id = Column(UUID(as_uuid=True), ForeignKey('collections.id', ondelete='CASCADE', use_alter=True, name='fk_collection_parent'), nullable=True)
+
+    # Soft Delete (from market-ui)
+    is_deleted = Column(Boolean, nullable=False, default=False)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+
     # Graph Generation Status
     is_graph_generated = Column(Boolean, nullable=False, default=False)
     graph_generated_at = Column(DateTime(timezone=True))
@@ -54,12 +61,18 @@ class Collection(Base):
     graph_entities = relationship("GraphEntity", back_populates="source_collection", lazy="dynamic")
     graph_relationships = relationship("GraphRelationship", back_populates="source_collection", lazy="dynamic")
 
+    # Hierarchical relationships (from market-ui)
+    parent = relationship("Collection", remote_side=[id], back_populates="subcollections")
+    subcollections = relationship("Collection", back_populates="parent", lazy="dynamic", cascade="all")
+
     # Table Constraints
     __table_args__ = (
         CheckConstraint("length(trim(name)) > 0", name="collections_name_not_empty"),
         Index('idx_collections_owner_id', 'owner_id'),
         Index('idx_collections_org_id', 'org_id'),
         Index('idx_collections_is_graph_generated', 'is_graph_generated'),
+        Index('idx_collections_parent_id', 'parent_id'),
+        Index('idx_collections_is_deleted', 'is_deleted'),
     )
 
     def __repr__(self):
@@ -310,11 +323,29 @@ class VisibilityProfile(Base):
     # Ownership
     owner_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
 
+    # Scope (from market-ui) - Links to specific file or collection
+    file_id = Column(UUID(as_uuid=True), ForeignKey('documents.id', ondelete='CASCADE', use_alter=True, name='fk_visibility_profile_document'), nullable=True)
+    collection_id = Column(UUID(as_uuid=True), ForeignKey('collections.id', ondelete='CASCADE', use_alter=True, name='fk_visibility_profile_collection'), nullable=True)
+    version_id = Column(Text, nullable=True)  # "DEFAULT" or collection_id
+
+    # Profile Type (from market-ui)
+    profile_type = Column(String(20), nullable=False)  # 'FILE', 'COLLECTION', 'GLOBAL'
+
     # Visibility Configuration
     visible_entity_types = Column(JSON)  # Array of entity types to show
     visible_relationship_types = Column(JSON)  # Array of relationship types to show
     hidden_entities = Column(JSON)  # Array of specific entity IDs to hide
     hidden_relationships = Column(JSON)  # Array of specific relationship IDs to hide
+
+    # Extended visibility config (from market-ui)
+    all_entities = Column(JSON)  # All available entity types/IDs
+    enabled_entities = Column(JSON)  # Currently enabled entity types/IDs
+    all_relationships = Column(JSON)  # All available relationship types
+    enabled_relationships = Column(JSON)  # Currently enabled relationship types
+
+    # Flags (from market-ui)
+    auto_include_new = Column(Boolean, nullable=False, default=True)  # Auto-include new entities
+    is_active = Column(Boolean, nullable=False, default=True)  # Active status
 
     # Timestamps
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -322,11 +353,19 @@ class VisibilityProfile(Base):
 
     # Relationships
     owner = relationship("User")
+    document = relationship("Document", foreign_keys=[file_id])
+    collection = relationship("Collection", foreign_keys=[collection_id])
 
     # Table Constraints
     __table_args__ = (
         CheckConstraint("length(trim(name)) > 0", name="visibility_profiles_name_not_empty"),
+        CheckConstraint(
+            "profile_type IN ('FILE', 'COLLECTION', 'GLOBAL')",
+            name="visibility_profiles_valid_profile_type"
+        ),
         Index('idx_visibility_profiles_owner_id', 'owner_id'),
+        Index('idx_visibility_profiles_file_id', 'file_id'),
+        Index('idx_visibility_profiles_collection_id', 'collection_id'),
     )
 
     def __repr__(self):

@@ -7,7 +7,7 @@ PostgreSQL database, including relationships and queries.
 
 import pytest
 import uuid
-from axai_pg import Organization, User, Document, Summary, Topic, DocumentTopic
+from axai_pg import Organization, User, Document, Summary, Topic, DocumentTopic, Collection, VisibilityProfile
 
 
 @pytest.mark.integration
@@ -295,4 +295,283 @@ class TestCRUDOperations:
         assert updated_doc.content == "Updated content with more information"
         assert updated_doc.status == "published"
         assert updated_doc.owner_id == user.id  # Foreign key unchanged
-        assert updated_doc.org_id == org.id  # Foreign key unchanged 
+        assert updated_doc.org_id == org.id  # Foreign key unchanged
+
+    def test_create_collection_with_hierarchy(self, db_session):
+        """Test creating hierarchical collections with parent-child relationships."""
+        # Create organization and user
+        org = Organization(name="Test Org")
+        db_session.add(org)
+        db_session.flush()
+
+        user = User(
+            username="testuser",
+            email="test@example.com",
+            org_id=org.id
+        )
+        db_session.add(user)
+        db_session.flush()
+
+        # Create root collection
+        root_collection = Collection(
+            name="Root Collection",
+            description="Top level collection",
+            owner_id=user.id,
+            org_id=org.id,
+            parent_id=None,  # No parent - this is root
+            is_deleted=False
+        )
+        db_session.add(root_collection)
+        db_session.flush()
+
+        assert root_collection.id is not None
+        assert isinstance(root_collection.id, uuid.UUID)
+        assert root_collection.parent_id is None
+        assert root_collection.is_deleted is False
+        assert root_collection.deleted_at is None
+
+        # Create child collection
+        child_collection = Collection(
+            name="Child Collection",
+            description="Nested collection",
+            owner_id=user.id,
+            org_id=org.id,
+            parent_id=root_collection.id,
+            is_deleted=False
+        )
+        db_session.add(child_collection)
+        db_session.flush()
+
+        assert child_collection.id is not None
+        assert isinstance(child_collection.id, uuid.UUID)
+        assert isinstance(child_collection.parent_id, uuid.UUID)
+        assert child_collection.parent_id == root_collection.id
+
+        # Verify relationships
+        assert child_collection.parent.id == root_collection.id
+        assert root_collection.subcollections.first().id == child_collection.id
+        assert root_collection.owner.id == user.id
+
+    def test_create_visibility_profile_for_file(self, db_session):
+        """Test creating visibility profile linked to a file/document."""
+        # Create organization, user, and document
+        org = Organization(name="Test Org")
+        db_session.add(org)
+        db_session.flush()
+
+        user = User(
+            username="testuser",
+            email="test@example.com",
+            org_id=org.id
+        )
+        db_session.add(user)
+        db_session.flush()
+
+        content = "Test document content"
+        document = Document(
+            title="Test Document",
+            content=content,
+            owner_id=user.id,
+            org_id=org.id,
+            document_type="text",
+            status="draft",
+            filename="test.txt",
+            file_path="/test/path/test.txt",
+            size=len(content),
+            content_type="text/plain"
+        )
+        db_session.add(document)
+        db_session.flush()
+
+        # Create visibility profile for file
+        profile = VisibilityProfile(
+            name="File Visibility Profile",
+            description="Controls entity visibility for test file",
+            owner_id=user.id,
+            file_id=document.id,
+            collection_id=None,
+            version_id="DEFAULT",
+            profile_type="FILE",
+            visible_entity_types=["Person", "Organization"],
+            visible_relationship_types=["works_for", "knows"],
+            hidden_entities=[],
+            hidden_relationships=[],
+            all_entities=["Person", "Organization", "Location"],
+            enabled_entities=["Person", "Organization"],
+            all_relationships=["works_for", "knows", "located_in"],
+            enabled_relationships=["works_for", "knows"],
+            auto_include_new=True,
+            is_active=True
+        )
+        db_session.add(profile)
+        db_session.flush()
+
+        assert profile.id is not None
+        assert isinstance(profile.id, uuid.UUID)
+        assert isinstance(profile.file_id, uuid.UUID)
+        assert profile.file_id == document.id
+        assert profile.collection_id is None
+        assert profile.profile_type == "FILE"
+        assert profile.auto_include_new is True
+        assert profile.is_active is True
+        assert profile.visible_entity_types == ["Person", "Organization"]
+        assert profile.enabled_entities == ["Person", "Organization"]
+
+        # Verify relationships
+        assert profile.owner.id == user.id
+        assert profile.document.id == document.id
+
+    def test_create_visibility_profile_for_collection(self, db_session):
+        """Test creating visibility profile linked to a collection."""
+        # Create organization, user, and collection
+        org = Organization(name="Test Org")
+        db_session.add(org)
+        db_session.flush()
+
+        user = User(
+            username="testuser",
+            email="test@example.com",
+            org_id=org.id
+        )
+        db_session.add(user)
+        db_session.flush()
+
+        collection = Collection(
+            name="Test Collection",
+            description="Test collection for visibility",
+            owner_id=user.id,
+            org_id=org.id,
+            is_deleted=False
+        )
+        db_session.add(collection)
+        db_session.flush()
+
+        # Create visibility profile for collection
+        profile = VisibilityProfile(
+            name="Collection Visibility Profile",
+            description="Controls entity visibility for test collection",
+            owner_id=user.id,
+            file_id=None,
+            collection_id=collection.id,
+            version_id=str(collection.id),
+            profile_type="COLLECTION",
+            visible_entity_types=["Person"],
+            visible_relationship_types=["knows"],
+            hidden_entities=[],
+            hidden_relationships=[],
+            all_entities=["Person", "Organization"],
+            enabled_entities=["Person"],
+            all_relationships=["knows", "works_for"],
+            enabled_relationships=["knows"],
+            auto_include_new=False,
+            is_active=True
+        )
+        db_session.add(profile)
+        db_session.flush()
+
+        assert profile.id is not None
+        assert isinstance(profile.collection_id, uuid.UUID)
+        assert profile.collection_id == collection.id
+        assert profile.file_id is None
+        assert profile.profile_type == "COLLECTION"
+        assert profile.version_id == str(collection.id)
+        assert profile.auto_include_new is False
+
+        # Verify relationships
+        assert profile.collection.id == collection.id
+
+    def test_collection_soft_delete(self, db_session):
+        """Test soft delete functionality for collections."""
+        # Create organization and user
+        org = Organization(name="Test Org")
+        db_session.add(org)
+        db_session.flush()
+
+        user = User(
+            username="testuser",
+            email="test@example.com",
+            org_id=org.id
+        )
+        db_session.add(user)
+        db_session.flush()
+
+        # Create collection
+        collection = Collection(
+            name="Test Collection",
+            description="Collection to be soft deleted",
+            owner_id=user.id,
+            org_id=org.id,
+            is_deleted=False,
+            deleted_at=None
+        )
+        db_session.add(collection)
+        db_session.flush()
+
+        original_id = collection.id
+        assert collection.is_deleted is False
+        assert collection.deleted_at is None
+
+        # Soft delete the collection
+        from datetime import datetime, timezone
+        collection.is_deleted = True
+        collection.deleted_at = datetime.now(timezone.utc)
+        db_session.flush()
+
+        # Verify soft delete persisted
+        deleted_collection = db_session.query(Collection).filter_by(id=original_id).first()
+        assert deleted_collection.id == original_id
+        assert deleted_collection.is_deleted is True
+        assert deleted_collection.deleted_at is not None
+        assert isinstance(deleted_collection.deleted_at, datetime)
+
+        # Verify we can query to exclude soft-deleted items
+        active_collections = db_session.query(Collection).filter_by(
+            is_deleted=False,
+            owner_id=user.id
+        ).all()
+        assert len(active_collections) == 0
+
+    def test_update_visibility_profile(self, db_session):
+        """Test updating visibility profile fields."""
+        # Create organization and user
+        org = Organization(name="Test Org")
+        db_session.add(org)
+        db_session.flush()
+
+        user = User(
+            username="testuser",
+            email="test@example.com",
+            org_id=org.id
+        )
+        db_session.add(user)
+        db_session.flush()
+
+        # Create visibility profile
+        profile = VisibilityProfile(
+            name="Original Profile",
+            description="Original description",
+            owner_id=user.id,
+            profile_type="GLOBAL",
+            visible_entity_types=["Person"],
+            enabled_entities=["Person"],
+            auto_include_new=True,
+            is_active=True
+        )
+        db_session.add(profile)
+        db_session.flush()
+
+        original_id = profile.id
+
+        # Update profile
+        profile.name = "Updated Profile"
+        profile.enabled_entities = ["Person", "Organization", "Location"]
+        profile.is_active = False
+        db_session.flush()
+
+        # Verify updates persisted
+        updated_profile = db_session.query(VisibilityProfile).filter_by(id=original_id).first()
+        assert updated_profile.id == original_id
+        assert updated_profile.name == "Updated Profile"
+        assert updated_profile.enabled_entities == ["Person", "Organization", "Location"]
+        assert updated_profile.is_active is False
+        assert updated_profile.owner_id == user.id  # Foreign key unchanged
