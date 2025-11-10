@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, CheckConstraint, Index
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, CheckConstraint, Index, Boolean
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
@@ -7,10 +7,16 @@ from ..config.database import Base
 
 class User(Base):
     """
-    Users belong to organizations and can own documents.
+    Users can belong to organizations and can own documents.
 
-    Each user is associated with exactly one organization (multi-tenant model).
-    Users can own documents and create document versions.
+    Supports both organizational (multi-tenant) and non-organizational users.
+    Users can own documents, create document versions, and have authentication credentials.
+
+    Fields from market-ui integration:
+    - hashed_password: For local authentication
+    - is_active: Account activation status
+    - is_admin: Administrator privileges
+    - is_email_verified: Email verification status
     """
     __tablename__ = 'users'
 
@@ -20,14 +26,39 @@ class User(Base):
     # Core Fields
     username = Column(Text, nullable=False, unique=True)
     email = Column(Text, nullable=False, unique=True)
-    org_id = Column(UUID(as_uuid=True), ForeignKey('organizations.id', ondelete='CASCADE'), nullable=False)
+
+    # Organization (nullable to support non-organizational users from market-ui)
+    org_id = Column(UUID(as_uuid=True), ForeignKey('organizations.id', ondelete='CASCADE'), nullable=True)
+
+    # Authentication Fields (from market-ui)
+    hashed_password = Column(Text, nullable=True)  # Nullable for external auth providers
+    is_active = Column(Boolean, nullable=False, server_default='true')
+    is_admin = Column(Boolean, nullable=False, server_default='false')
+    is_email_verified = Column(Boolean, nullable=False, server_default='false')
+
+    # Timestamps
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     # Relationships
     organization = relationship("Organization", back_populates="users")
     owned_documents = relationship("Document", back_populates="owner", lazy="dynamic")
-    document_versions = relationship("DocumentVersion", back_populates="modified_by", lazy="dynamic")
+    document_versions = relationship("DocumentVersion", back_populates="created_by", lazy="dynamic")
+
+    # Additional relationships (from market-ui)
+    collections = relationship("Collection", back_populates="owner", lazy="dynamic")
+    tokens = relationship("Token", back_populates="user", lazy="dynamic", cascade="all, delete-orphan")
+    feedback_submissions = relationship("Feedback", back_populates="user", lazy="dynamic")
+
+    # Role relationship (from market-ui) - read-only through UserRole table
+    roles = relationship(
+        "Role",
+        secondary="user_roles",
+        primaryjoin="User.id == UserRole.user_id",
+        secondaryjoin="UserRole.role_id == Role.id",
+        viewonly=True,  # Read-only since we use UserRole directly for writes
+        lazy="select"
+    )
 
     # Table Constraints
     __table_args__ = (

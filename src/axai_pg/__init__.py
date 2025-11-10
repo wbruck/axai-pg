@@ -10,9 +10,11 @@ from .data.models import (
     DocumentVersion,
     Summary,
     Topic,
-    GraphNode,
+    GraphEntity,
     GraphRelationship,
-    DocumentTopic
+    DocumentTopic,
+    Collection,
+    VisibilityProfile,
 )
 
 __version__ = "0.1.0"

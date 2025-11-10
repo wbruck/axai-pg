@@ -8,7 +8,8 @@ with all PostgreSQL-specific features (extensions, triggers, constraints, indexe
 import pytest
 from sqlalchemy import text, inspect
 from src.axai_pg.data.models import Organization, User, Document, DocumentVersion, Summary, Topic, DocumentTopic
-from src.axai_pg.data.models.graph import GraphNode, GraphRelationship
+from src.axai_pg.data.models.graph import GraphEntity, GraphRelationship
+from src.axai_pg.data.models.collection import Collection, VisibilityProfile
 
 
 @pytest.mark.integration
@@ -29,8 +30,15 @@ class TestSchemaCreation:
             'summaries',
             'topics',
             'document_topics',
-            'graph_nodes',
+            'graph_entities',
             'graph_relationships',
+            'collections',
+            'collection_entities',
+            'collection_relationships',
+            'visibility_profiles',
+            'entity_links',
+            'entity_operations',
+            'document_collection_contexts',
         ]
 
         for table in expected_tables:
@@ -74,6 +82,8 @@ class TestSchemaCreation:
             'documents',
             'summaries',
             'topics',
+            'collections',
+            'visibility_profiles',
         ]
 
         for table in tables_with_triggers:
@@ -166,13 +176,18 @@ class TestSchemaCreation:
         db_session.flush()
 
         # Invalid status should fail
+        content = "Content"
         doc = Document(
             title="Test",
-            content="Content",
+            content=content,
             owner_id=user.id,
             org_id=org.id,
             document_type="text",
-            status="invalid_status"  # Not in allowed values
+            status="invalid_status",  # Not in allowed values
+            filename="test.txt",
+            file_path="/test/path/test.txt",
+            size=len(content),
+            content_type="text/plain"
         )
         db_session.add(doc)
 
@@ -193,14 +208,19 @@ class TestSchemaCreation:
         db_session.flush()
 
         # Version <= 0 should fail
+        content = "Content"
         doc = Document(
             title="Test",
-            content="Content",
+            content=content,
             owner_id=user.id,
             org_id=org.id,
             document_type="text",
             status="draft",
-            version=0  # Should be > 0
+            version=0,  # Should be > 0
+            filename="test.txt",
+            file_path="/test/path/test.txt",
+            size=len(content),
+            content_type="text/plain"
         )
         db_session.add(doc)
 
@@ -252,13 +272,18 @@ class TestSchemaCreation:
         db_session.add(user)
         db_session.flush()
 
+        content = "Content"
         doc = Document(
             title="Test Doc",
-            content="Content",
+            content=content,
             owner_id=user.id,
             org_id=org.id,
             document_type="text",
-            status="draft"
+            status="draft",
+            filename="test_doc.txt",
+            file_path="/test/path/test_doc.txt",
+            size=len(content),
+            content_type="text/plain"
         )
         db_session.add(doc)
         db_session.commit()
@@ -305,14 +330,19 @@ class TestSchemaCreation:
         db_session.flush()
 
         # Create document with JSONB metadata
+        content = "Content"
         doc = Document(
             title="Test Doc",
-            content="Content",
+            content=content,
             owner_id=user.id,
             org_id=org.id,
             document_type="text",
             status="draft",
-            document_metadata={"key": "value", "nested": {"data": 123}}
+            document_metadata={"key": "value", "nested": {"data": 123}},
+            filename="test_doc.txt",
+            file_path="/test/path/test_doc.txt",
+            size=len(content),
+            content_type="text/plain"
         )
         db_session.add(doc)
         db_session.commit()
@@ -320,6 +350,98 @@ class TestSchemaCreation:
         # Retrieve and verify
         retrieved_doc = db_session.query(Document).filter_by(id=doc.id).first()
         assert retrieved_doc.document_metadata == {"key": "value", "nested": {"data": 123}}
+
+    def test_collection_parent_foreign_key(self, db_session):
+        """Test that collection self-referential FK is properly created."""
+        inspector = inspect(db_session.bind)
+
+        # Check parent_id column exists
+        collection_columns = {col['name']: col for col in inspector.get_columns('collections')}
+        assert 'parent_id' in collection_columns, "Collections should have parent_id column"
+        assert 'UUID' in str(collection_columns['parent_id']['type'])
+
+        # Check self-referential FK exists
+        collection_fks = inspector.get_foreign_keys('collections')
+        parent_fk = next((fk for fk in collection_fks if 'collections' in fk['referred_table']), None)
+        assert parent_fk is not None, "Collections should have self-referential FK"
+        assert 'parent_id' in parent_fk['constrained_columns']
+
+    def test_visibility_profile_foreign_keys(self, db_session):
+        """Test that visibility_profile FKs are properly created."""
+        inspector = inspect(db_session.bind)
+
+        # Check file_id and collection_id columns exist
+        vp_columns = {col['name']: col for col in inspector.get_columns('visibility_profiles')}
+        assert 'file_id' in vp_columns, "VisibilityProfile should have file_id column"
+        assert 'collection_id' in vp_columns, "VisibilityProfile should have collection_id column"
+        assert 'UUID' in str(vp_columns['file_id']['type'])
+        assert 'UUID' in str(vp_columns['collection_id']['type'])
+
+        # Check FKs exist
+        vp_fks = inspector.get_foreign_keys('visibility_profiles')
+        file_fk = next((fk for fk in vp_fks if 'documents' in fk['referred_table']), None)
+        collection_fk = next((fk for fk in vp_fks if 'collections' in fk['referred_table']), None)
+        assert file_fk is not None, "VisibilityProfile should have FK to documents"
+        assert collection_fk is not None, "VisibilityProfile should have FK to collections"
+
+    def test_check_constraint_visibility_profile_type(self, db_session):
+        """Test that visibility profile type check constraint works."""
+        # Create dependencies
+        org = Organization(name="Test Org")
+        db_session.add(org)
+        db_session.flush()
+
+        user = User(username="testuser", email="test@example.com", org_id=org.id)
+        db_session.add(user)
+        db_session.flush()
+
+        # Invalid profile_type should fail
+        profile = VisibilityProfile(
+            name="Test Profile",
+            owner_id=user.id,
+            profile_type="INVALID_TYPE"  # Not in ('FILE', 'COLLECTION', 'GLOBAL')
+        )
+        db_session.add(profile)
+
+        with pytest.raises(Exception) as exc_info:
+            db_session.commit()
+
+        assert "visibility_profiles_valid_profile_type" in str(exc_info.value) or \
+               "check constraint" in str(exc_info.value).lower()
+        db_session.rollback()
+
+    def test_json_columns_visibility_profile(self, db_session):
+        """Test that JSON columns work correctly for visibility profiles."""
+        # Create dependencies
+        org = Organization(name="Test Org")
+        db_session.add(org)
+        db_session.flush()
+
+        user = User(username="testuser", email="test@example.com", org_id=org.id)
+        db_session.add(user)
+        db_session.flush()
+
+        # Create visibility profile with JSON data
+        profile = VisibilityProfile(
+            name="Test Profile",
+            owner_id=user.id,
+            profile_type="GLOBAL",
+            visible_entity_types=["Person", "Organization"],
+            all_entities=["Person", "Organization", "Location"],
+            enabled_entities=["Person"],
+            all_relationships=["works_for", "knows"],
+            enabled_relationships=["knows"]
+        )
+        db_session.add(profile)
+        db_session.flush()
+
+        # Retrieve and verify JSON fields
+        retrieved_profile = db_session.query(VisibilityProfile).filter_by(id=profile.id).first()
+        assert retrieved_profile.visible_entity_types == ["Person", "Organization"]
+        assert retrieved_profile.all_entities == ["Person", "Organization", "Location"]
+        assert retrieved_profile.enabled_entities == ["Person"]
+        assert retrieved_profile.all_relationships == ["works_for", "knows"]
+        assert retrieved_profile.enabled_relationships == ["knows"]
 
     def test_table_comments_exist(self, db_session):
         """Test that table comments are added."""

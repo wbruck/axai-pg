@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, CheckConstraint, Index
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, CheckConstraint, Index, Boolean
 from sqlalchemy.dialects.postgresql import UUID, JSONB, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -7,43 +7,96 @@ from ..config.database import Base
 
 class Document(Base):
     """
-    Core document storage with ownership and metadata.
+    Unified document/file storage with ownership and metadata.
 
-    Documents are owned by users and belong to organizations (multi-tenant).
-    They support versioning, summaries, topics, and graph relationships.
+    Merges concepts from:
+    - axai-pg: Documents with content, summaries, topics
+    - market-ui: Files with storage metadata, collections, graph visualization
+
+    Supports both organizational (multi-tenant) and non-organizational usage.
+    Includes file storage metadata, versioning, summaries, topics, and graph relationships.
     """
     __tablename__ = 'documents'
 
     # Primary Key
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
-    # Core Fields
+    # Core Identification Fields
     title = Column(Text, nullable=False)
-    content = Column(Text, nullable=False)
+    filename = Column(Text, nullable=False, index=True)  # From market-ui: File storage name
+
+    # Content (nullable for binary files)
+    content = Column(Text, nullable=True)  # Made nullable for binary file support
+
+    # Ownership & Organization (both nullable for flexibility)
     owner_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
-    org_id = Column(UUID(as_uuid=True), ForeignKey('organizations.id', ondelete='CASCADE'), nullable=False)
+    org_id = Column(UUID(as_uuid=True), ForeignKey('organizations.id', ondelete='CASCADE'), nullable=True)  # Nullable for non-org
+
+    # File Storage Metadata (from market-ui)
+    file_path = Column(Text, nullable=False)  # Physical/cloud storage path
+    size = Column(Integer, nullable=False)  # File size in bytes (market-ui 'size')
+    content_type = Column(Text, nullable=False)  # MIME type
+
+    # Document Classification
     document_type = Column(String(50), nullable=False)
-    status = Column(String(20), nullable=False, default='draft')
+    file_format = Column(String(50))  # File extension or format
+
+    # Status & Processing
+    status = Column(String(20), nullable=False, default='draft')  # draft/published/archived/deleted
+    processing_status = Column(String(50), default='pending')  # pending/processing/complete/error
+    is_deleted = Column(Boolean, nullable=False, default=False)  # From market-ui: Soft delete flag
+    deleted_at = Column(DateTime(timezone=True))  # From market-ui: Deletion timestamp
+
+    # Versioning
     version = Column(Integer, nullable=False, default=1)
+    version_id = Column(String)  # From market-ui: Version identifier (collection_id or "DEFAULT")
+    description = Column(Text)  # From market-ui: Document description
+
+    # Content Analysis (from axai-pg)
+    word_count = Column(Integer)
+    content_hash = Column(String(64))
+
+    # Source & References
+    source = Column(String(100))  # Origin system
+    external_ref_id = Column(String(100))  # External reference ID
+
+    # Search & Metadata (from market-ui)
+    topics = Column(Text)  # Legacy: Comma-separated topics
+    tags = Column(JSON)  # Array of tags
+    key_terms = Column(JSON)  # Array of key terms
+    linked_docs = Column(JSON)  # Array of linked document IDs
+    summary = Column(Text)  # Quick summary text (separate from Summary table)
+
+    # Legacy Graph Data (from market-ui - deprecated, use graph_entities table)
+    graph_nodes = Column(JSON)  # Legacy graph nodes
+    graph_relationships = Column(JSON)  # Legacy graph relationships
+
+    # Graph Management (from market-ui)
+    default_visibility_profile_id = Column(UUID(as_uuid=True), ForeignKey('visibility_profiles.id'))
+    entities_last_updated = Column(DateTime(timezone=True))
+    relationships_last_updated = Column(DateTime(timezone=True))
+
+    # Metadata
+    document_metadata = Column(JSONB, name='metadata')
+
+    # Timestamps
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
-    file_format = Column(String(50))
-    size_bytes = Column(Integer)
-    word_count = Column(Integer)
-    processing_status = Column(String(50), default='pending')
-    source = Column(String(100))
-    content_hash = Column(String(64))
-    external_ref_id = Column(String(100))
-    document_metadata = Column(JSONB, name='metadata')
 
     # Relationships
     owner = relationship("User", back_populates="owned_documents")
     organization = relationship("Organization", back_populates="documents")
     versions = relationship("DocumentVersion", back_populates="document", lazy="dynamic", cascade="all, delete-orphan")
     summaries = relationship("Summary", back_populates="document", lazy="dynamic", cascade="all, delete-orphan")
-    topics = relationship("DocumentTopic", back_populates="document", lazy="dynamic", cascade="all, delete-orphan")
-    graph_node = relationship("GraphNode", back_populates="document", uselist=False, cascade="all, delete-orphan")
-    graph_relationships = relationship("GraphRelationship", back_populates="document", lazy="dynamic", cascade="all, delete-orphan")
+    topics_rel = relationship("DocumentTopic", back_populates="document", lazy="dynamic", cascade="all, delete-orphan")
+    graph_entity = relationship("GraphEntity", back_populates="document", foreign_keys="GraphEntity.document_id", uselist=False, cascade="all, delete-orphan")
+    graph_relationships_rel = relationship("GraphRelationship", back_populates="document", foreign_keys="GraphRelationship.document_id", lazy="dynamic", cascade="all, delete-orphan")
+
+    # From market-ui
+    collections = relationship("Collection", secondary="document_collection_association", back_populates="documents", lazy="dynamic")
+    graph_entities = relationship("GraphEntity", back_populates="source_file", lazy="dynamic", foreign_keys="GraphEntity.source_file_id")
+    collection_contexts = relationship("DocumentCollectionContext", back_populates="document", lazy="dynamic", cascade="all, delete-orphan")
+    default_visibility_profile = relationship("VisibilityProfile", foreign_keys=[default_visibility_profile_id])
 
     # Table Constraints
     __table_args__ = (
@@ -62,6 +115,8 @@ class Document(Base):
         Index('idx_documents_type', 'document_type'),
         Index('idx_documents_status', 'status'),
         Index('idx_documents_org_status', 'org_id', 'status'),
+        Index('idx_documents_is_deleted', 'is_deleted'),
+        Index('idx_documents_version_id', 'version_id'),
     )
 
     def __repr__(self):
@@ -73,21 +128,25 @@ class DocumentVersion(Base):
 
     # Primary Key
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    
+
     # Core Fields
     document_id = Column(UUID(as_uuid=True), ForeignKey('documents.id', ondelete='CASCADE'), nullable=False)
     version = Column(Integer, nullable=False)
     content = Column(Text, nullable=False)
     title = Column(Text, nullable=False)
     status = Column(String(20), nullable=False)
-    modified_by_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    created_by_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     change_description = Column(Text)
     doc_metadata = Column(JSON)
 
+    # File Storage Metadata (from market-ui FileVersion)
+    file_path = Column(Text, nullable=False)
+    content_type = Column(Text, nullable=False)
+
     # Relationships
     document = relationship("Document", back_populates="versions")
-    modified_by = relationship("User", back_populates="document_versions")
+    created_by = relationship("User", back_populates="document_versions")
 
     # Unique constraint for document_id and version combination
     __table_args__ = (
